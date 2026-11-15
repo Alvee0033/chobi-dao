@@ -3,14 +3,13 @@ version: "3.9"
 services:
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: chobi-postgres
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-chobi}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chobipassword123}
       POSTGRES_DB: ${POSTGRES_DB:-chobi_db}
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+    expose:
+      - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -21,10 +20,9 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: chobi-redis
     restart: always
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
+    expose:
+      - "6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -35,15 +33,14 @@ services:
 
   minio:
     image: elestio/minio:latest
-    container_name: chobi-minio
     restart: always
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-chobiadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-chobiadminsecret123}
-    ports:
-      - "${MINIO_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    expose:
+      - "9000"
+      - "9001"
     volumes:
       - minio_data:/data
     healthcheck:
@@ -54,7 +51,6 @@ services:
 
   minio-init:
     image: elestio/minio:latest
-    container_name: chobi-minio-init
     depends_on:
       minio:
         condition: service_healthy
@@ -70,7 +66,6 @@ services:
     build:
       context: ./apis/apps/ai-service
       dockerfile: Dockerfile
-    container_name: chobi-ai-service
     restart: always
     environment:
       INSIGHTFACE_MODEL: buffalo_s
@@ -79,14 +74,13 @@ services:
       DET_SIZE: 480
     volumes:
       - insightface_models:/root/.insightface
-    ports:
-      - "${AI_SERVICE_PORT:-8000}:8000"
+    expose:
+      - "8000"
 
   api-gateway:
     build:
       context: ./apis
       dockerfile: infra/docker/api-gateway.Dockerfile
-    container_name: chobi-api-gateway
     restart: always
     environment:
       PORT: 3001
@@ -111,8 +105,8 @@ services:
       LOCAL_STORAGE_DIR: /storage/uploads
     volumes:
       - local_storage:/storage/uploads
-    ports:
-      - "${API_GATEWAY_PORT:-3001}:3001"
+    expose:
+      - "3001"
     depends_on:
       postgres:
         condition: service_healthy
@@ -125,7 +119,6 @@ services:
     build:
       context: ./apis
       dockerfile: infra/docker/worker.Dockerfile
-    container_name: chobi-worker
     restart: always
     environment:
       PORT: 3002
@@ -143,15 +136,14 @@ services:
     build:
       context: ./web
       dockerfile: Dockerfile
-    container_name: chobi-web
     restart: always
     environment:
       NODE_ENV: production
       PORT: 3000
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3001}
-    ports:
-      - "${WEB_PORT:-3000}:3000"
+    expose:
+      - "3000"
     depends_on:
       - api-gateway
 
