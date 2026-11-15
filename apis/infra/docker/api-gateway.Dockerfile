@@ -9,5 +9,5 @@ RUN corepack enable && corepack prepare pnpm@9.12.0 --activate && pnpm install -
 RUN pnpm --filter @framefind/shared-contracts build
 RUN cd apps/api-gateway && npx prisma generate --schema=./prisma/schema.prisma
 RUN cd apps/api-gateway && npx nest build
-CMD ["sh", "-c", "cd apps/api-gateway && npx prisma generate --schema=./prisma/schema.prisma && npx prisma migrate deploy && node dist/apps/api-gateway/src/main.js"]
+CMD ["sh", "-c", "cd apps/api-gateway && npx prisma generate --schema=./prisma/schema.prisma && npx prisma db push --accept-data-loss && (npx tsx prisma/seed.ts || true) && node dist/apps/api-gateway/src/main.js"]
 
