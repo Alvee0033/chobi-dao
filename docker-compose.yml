@@ -71,7 +71,8 @@ services:
       INSIGHTFACE_MODEL: buffalo_s
       ORT_INTRA_THREADS: 2
       ORT_INTER_THREADS: 1
-      DET_SIZE: 480
+      DET_SIZE: 640
+      DET_THRESH: 0.35
     volumes:
       - insightface_models:/root/.insightface
     expose:

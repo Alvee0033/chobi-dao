@@ -45,12 +45,13 @@ def startup_event():
             providers=["CPUExecutionProvider"],
             session_options=session_options,
         )
-        # Optimal det_size (320-480) for high accuracy with minimal CPU load
-        det_dim = int(os.getenv("DET_SIZE", "480"))
-        fa.prepare(ctx_id=-1, det_size=(det_dim, det_dim))
+        # Optimal det_size (640) and det_thresh (0.35) for capturing angled, distant, and makeup faces
+        det_dim = int(os.getenv("DET_SIZE", "640"))
+        det_thresh = float(os.getenv("DET_THRESH", "0.35"))
+        fa.prepare(ctx_id=-1, det_size=(det_dim, det_dim), det_thresh=det_thresh)
         face_app = fa
         MODEL_READY = True
-        logger.info("InsightFace loaded and ready.")
+        logger.info(f"InsightFace loaded and ready (det_size={det_dim}, det_thresh={det_thresh}).")
     except Exception as e:
         logger.warning(f"Could not load InsightFace model directly ({e}). Running in lightweight fallback mode.")
         MODEL_READY = True
