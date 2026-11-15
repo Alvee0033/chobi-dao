@@ -115,13 +115,14 @@ export class FaceIndexProcessor extends WorkerHost {
           // Match or create person
           let matchedPersonId: string | null = null;
           try {
-            const similarRows = await this.prisma.$queryRawUnsafe<Array<{ person_id: string }>>(
-              `SELECT f.person_id
+            const similarRows = await this.prisma.$queryRawUnsafe<Array<{ person_id: string; similarity: number }>>(
+              `SELECT f.person_id, (1 - (fe.embedding <=> $3::vector)) AS similarity
                FROM "face_embeddings" fe
                JOIN "faces" f ON f.id = fe.id::text
                WHERE fe.event_id = $1::uuid 
                  AND fe.photo_id != $2::uuid
-                 AND (1 - (fe.embedding <=> $3::vector)) >= 0.65
+                 AND (1 - (fe.embedding <=> $3::vector)) >= 0.60
+               ORDER BY similarity DESC
                LIMIT 1`,
               eventId,
               photoId,
@@ -130,7 +131,9 @@ export class FaceIndexProcessor extends WorkerHost {
             if (similarRows.length > 0 && similarRows[0].person_id) {
               matchedPersonId = similarRows[0].person_id;
             }
-          } catch {}
+          } catch (clusterErr) {
+            console.error("Worker clustering query error:", clusterErr);
+          }
 
           if (!matchedPersonId) {
             currentPersonCount += 1;

@@ -109,15 +109,5 @@ async def analyze(file: UploadFile = File(...)):
         except Exception as err:
             logger.error(f"InsightFace inference error: {err}")
 
-    # Fallback or synthetic generation if model not available or zero faces found in fallback
-    if len(faces_result) == 0 and face_app is None:
-        seed = int(arr.mean()) if arr.size else 1
-        rng = np.random.default_rng(seed)
-        embedding = normalize(rng.random(512).astype(np.float32)).tolist()
-        faces_result.append({
-            "bbox": [w * 0.25, h * 0.2, w * 0.75, h * 0.85],
-            "embedding": embedding,
-            "det_score": 0.99,
-        })
-
+    # If no faces found by InsightFace, return empty list
     return {"faces": faces_result}
