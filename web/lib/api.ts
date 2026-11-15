@@ -93,8 +93,18 @@ export type EventPerson = {
   coverThumbUrl: string;
   updatedAt: string;
 };
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3001";
+ 
+export function getApiBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_API_BASE_URL) return process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
+  if (typeof window !== "undefined") {
+    const { hostname, protocol } = window.location;
+    if (hostname.includes("sslip.io") && !hostname.startsWith("api-")) {
+      return `${protocol}//api-${hostname}`;
+    }
+  }
+  return "http://localhost:3001";
+}
 
 const requestCache = new Map<string, { data: any; expiresAt: number }>();
 
@@ -116,7 +126,8 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   const hasBody = init?.body !== undefined && init?.body !== null;
-  const res = await fetch(`${API_BASE}${path}`, {
+  const apiBase = getApiBaseUrl();
+  const res = await fetch(`${apiBase}${path}`, {
     ...init,
     headers: {
       ...(hasBody ? { "Content-Type": "application/json" } : {}),

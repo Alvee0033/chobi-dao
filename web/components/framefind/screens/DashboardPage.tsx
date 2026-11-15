@@ -1377,7 +1377,7 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
     const presign = await withRefresh((token) => createEventCoverUploadUrl(token, eventId, file.name, file.type));
     const uploadUrl = presign.uploadUrl.startsWith("http")
       ? presign.uploadUrl
-      : `${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3001"}${presign.uploadUrl}`;
+      : `${getApiBaseUrl()}${presign.uploadUrl}`;
     const uploadRes = await withRefresh((token) => fetch(uploadUrl, {
       method: "PUT",
       body: file,
