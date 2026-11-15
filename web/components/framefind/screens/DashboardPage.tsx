@@ -1,6 +1,6 @@
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState, memo } from "react";
-import { createEvent, createEventCoverUploadUrl, createUploadUrl, disconnectGoogleDrive, finalizeUpload, getEvent, getEventIndexStatus, getEventPeople, getEventQr, getEvents, getGoogleConnectUrl, refreshToken, updateEvent, deleteEvent, getEventPhotos, deletePhoto, retryPhoto, getPhotographerAnalytics, type EventPayload, type EventIndexStatus, type EventPhoto, type EventPerson, type PhotographerAnalytics } from "@/lib/api";
+import { createEvent, createEventCoverUploadUrl, createUploadUrl, disconnectGoogleDrive, finalizeUpload, getApiBaseUrl, getEvent, getEventIndexStatus, getEventPeople, getEventQr, getEvents, getGoogleConnectUrl, refreshToken, updateEvent, deleteEvent, getEventPhotos, deletePhoto, retryPhoto, getPhotographerAnalytics, type EventPayload, type EventIndexStatus, type EventPhoto, type EventPerson, type PhotographerAnalytics } from "@/lib/api";
 import { usePathname, useRouter } from "next/navigation";
 import { Icons } from "../icons";
 import type { DashboardAuthState, ShowToast, ViewSetter } from "../types";

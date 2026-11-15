@@ -154,7 +154,7 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
 
 function normalizeEvent<T extends EventPayload>(event: T): T {
   if (event.thumbnailUrl?.startsWith("/")) {
-    return { ...event, thumbnailUrl: `${API_BASE}${event.thumbnailUrl}` };
+    return { ...event, thumbnailUrl: `${getApiBaseUrl()}${event.thumbnailUrl}` };
   }
   // If thumbnailUrl is missing but we have a coverPhotoKey that looks like a URL, use it
   if (!event.thumbnailUrl && event.coverPhotoKey?.startsWith("http")) {
@@ -195,7 +195,7 @@ export async function me(token: string): Promise<AuthUser> {
 
 export function getGoogleConnectUrl(token?: string): string {
   const query = token ? `?state=${encodeURIComponent(token)}` : "";
-  return `${API_BASE}/v1/auth/google${query}`;
+  return `${getApiBaseUrl()}/v1/auth/google${query}`;
 }
 
 export function parseGoogleCallbackPayload(encodedPayload: string): AuthPayload {
