@@ -85,8 +85,7 @@ export class SearchService {
             `SELECT photo_id, 1 - (embedding <=> $1::vector) as similarity
              FROM "face_embeddings"
              WHERE event_id = $2::uuid AND (1 - (embedding <=> $1::vector)) >= 0.58
-             ORDER BY similarity DESC
-             LIMIT 500`,
+             ORDER BY similarity DESC`,
             vectorStr,
             event.id,
           );

@@ -354,7 +354,6 @@ export class UploadService {
         ...(includeProcessing ? {} : { indexStatus: "indexed" })
       },
       orderBy: { uploadedAt: "desc" },
-      take: 500
     });
     const withUrls = await Promise.all(
       photos.map(async (photo) => {
