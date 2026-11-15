@@ -94,7 +94,7 @@ export class UploadService {
                  JOIN "faces" f ON f.id = fe.id::text
                  WHERE fe.event_id = $1::uuid 
                    AND fe.photo_id != $2::uuid
-                   AND (1 - (fe.embedding <=> $3::vector)) >= 0.58
+                   AND (1 - (fe.embedding <=> $3::vector)) >= 0.60
                  ORDER BY similarity DESC
                  LIMIT 1`,
                 eventId,

@@ -79,44 +79,20 @@ export class SearchService {
         if (mainFace && Array.isArray(mainFace.embedding) && mainFace.embedding.length === 512) {
           const vectorStr = `[${mainFace.embedding.join(",")}]`;
 
-          // 2. Direct pgvector cosine distance search
-          // InsightFace cosine similarity: >= 0.50 reliably captures makeup, lighting, and angle shifts
-          const directRows = await this.prisma.$queryRawUnsafe<Array<{ photo_id: string; similarity: number }>>(
-            `SELECT photo_id, (1 - (embedding <=> $1::vector)) as similarity
+          // 2. Ultra-fast pgvector cosine distance search
+          // InsightFace cosine similarity: >= 0.58 ensures accurate same-person matches without false positive crosses
+          const rows = await this.prisma.$queryRawUnsafe<Array<{ photo_id: string; similarity: number }>>(
+            `SELECT photo_id, 1 - (embedding <=> $1::vector) as similarity
              FROM "face_embeddings"
-             WHERE event_id = $2::uuid AND (1 - (embedding <=> $1::vector)) >= 0.50
+             WHERE event_id = $2::uuid AND (1 - (embedding <=> $1::vector)) >= 0.58
              ORDER BY similarity DESC`,
             vectorStr,
             event.id,
           );
 
-          for (const r of directRows) {
+          for (const r of rows) {
             matchedPhotoIds.push(r.photo_id);
             similarityMap.set(r.photo_id, Number(r.similarity));
-          }
-
-          // 3. Cluster expansion: If any face of a clustered person matches strongly (>= 0.55),
-          // include all photos linked to that person's cluster. This bridges before/after makeup photos!
-          const strongMatches = directRows.filter((r) => r.similarity >= 0.55);
-          if (strongMatches.length > 0) {
-            try {
-              const clusterRows = await this.prisma.$queryRawUnsafe<Array<{ photo_id: string }>>(
-                `SELECT DISTINCT f2.photo_id
-                 FROM "faces" f1
-                 JOIN "faces" f2 ON f1.person_id = f2.person_id
-                 WHERE f1.photo_id = ANY($1::uuid[])`,
-                strongMatches.map((m) => m.photo_id),
-              );
-
-              for (const cr of clusterRows) {
-                if (!similarityMap.has(cr.photo_id)) {
-                  matchedPhotoIds.push(cr.photo_id);
-                  similarityMap.set(cr.photo_id, 0.75); // Inherited cluster match score
-                }
-              }
-            } catch (clusterErr) {
-              console.warn("Search cluster expansion notice:", clusterErr);
-            }
           }
         }
       }

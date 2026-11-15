@@ -3,155 +3,105 @@ version: "3.9"
 services:
   postgres:
     image: pgvector/pgvector:pg16
-    restart: always
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-chobi}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chobipassword123}
-      POSTGRES_DB: ${POSTGRES_DB:-chobi_db}
-    expose:
-      - "5432"
+      POSTGRES_USER: framefind
+      POSTGRES_PASSWORD: framefind
+      POSTGRES_DB: framefind
+    ports:
+      - "5433:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-chobi} -d ${POSTGRES_DB:-chobi_db}"]
+      test: ["CMD-SHELL", "pg_isready -U framefind"]
       interval: 5s
       timeout: 5s
       retries: 20
 
   redis:
-    image: redis:7-alpine
-    restart: always
-    expose:
-      - "6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
+    image: redis:7
+    ports:
+      - "6379:6379"
 
   minio:
-    image: elestio/minio:latest
-    restart: always
+    image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-chobiadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-chobiadminsecret123}
-    expose:
-      - "9000"
-      - "9001"
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
     volumes:
       - minio_data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
-  minio-init:
-    image: elestio/minio:latest
+  api-gateway:
+    build:
+      context: ../../
+      dockerfile: infra/docker/api-gateway.Dockerfile
+    environment:
+      PORT: 3001
+      DATABASE_URL: postgresql://framefind:framefind@postgres:5432/framefind?schema=public
+      REDIS_URL: redis://redis:6379
+      JWT_ACCESS_SECRET: dev-access-secret
+      JWT_REFRESH_SECRET: dev-refresh-secret
+      LIVENESS_TOKEN_SECRET: dev-liveness-secret
+      SEARCH_SESSION_SECRET: dev-search-secret
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:3001/v1/auth/google/callback}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
+      AI_SERVICE_URL: http://ai-service:8000
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: http://localhost:9000
+      S3_REGION: us-east-1
+      S3_ACCESS_KEY_ID: minio
+      S3_SECRET_ACCESS_KEY: minio123
+      S3_BUCKET: framefind
+    ports:
+      - "3001:3001"
     depends_on:
-      minio:
+      postgres:
         condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      /usr/bin/mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-chobiadmin} ${MINIO_ROOT_PASSWORD:-chobiadminsecret123};
-      /usr/bin/mc mb --ignore-existing local/${S3_BUCKET:-chobi-photos};
-      /usr/bin/mc anonymous set download local/${S3_BUCKET:-chobi-photos};
-      exit 0;
-      "
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+
+  worker:
+    build:
+      context: ../../
+      dockerfile: infra/docker/worker.Dockerfile
+    environment:
+      PORT: 3002
+      DATABASE_URL: postgresql://framefind:framefind@postgres:5432/framefind?schema=public
+      REDIS_URL: redis://redis:6379
+      AI_SERVICE_URL: http://ai-service:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
 
   ai-service:
     build:
-      context: ./apis/apps/ai-service
+      context: ../../apps/ai-service
       dockerfile: Dockerfile
-    restart: always
     environment:
       INSIGHTFACE_MODEL: buffalo_s
       ORT_INTRA_THREADS: 2
       ORT_INTER_THREADS: 1
-      DET_SIZE: 640
-      DET_THRESH: 0.35
-    volumes:
-      - insightface_models:/root/.insightface
-    expose:
-      - "8000"
-
-  api-gateway:
-    build:
-      context: ./apis
-      dockerfile: infra/docker/api-gateway.Dockerfile
-    restart: always
-    environment:
-      PORT: 3001
-      NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER:-chobi}:${POSTGRES_PASSWORD:-chobipassword123}@postgres:5432/${POSTGRES_DB:-chobi_db}?schema=public
-      REDIS_URL: redis://redis:6379
-      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-chobi_super_jwt_secret_key_2026_xyz}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-chobi_super_refresh_secret_key_2026_xyz}
-      LIVENESS_TOKEN_SECRET: ${LIVENESS_TOKEN_SECRET:-chobi_liveness_secret_key_2026}
-      SEARCH_SESSION_SECRET: ${SEARCH_SESSION_SECRET:-chobi_search_secret_key_2026}
-      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
-      API_BASE_URL: ${API_BASE_URL:-http://localhost:3001}
-      AI_SERVICE_URL: http://ai-service:8000
-      STORAGE_DRIVER: minio
-      S3_ENDPOINT: http://minio:9000
-      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
-      S3_REGION: us-east-1
-      S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-chobiadmin}
-      S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-chobiadminsecret123}
-      S3_BUCKET: ${S3_BUCKET:-chobi-photos}
-      S3_FORCE_PATH_STYLE: "true"
-      LOCAL_STORAGE_DIR: /storage/uploads
-    volumes:
-      - local_storage:/storage/uploads
-    expose:
-      - "3001"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-
-  worker:
-    build:
-      context: ./apis
-      dockerfile: infra/docker/worker.Dockerfile
-    restart: always
-    environment:
-      PORT: 3002
-      NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER:-chobi}:${POSTGRES_PASSWORD:-chobipassword123}@postgres:5432/${POSTGRES_DB:-chobi_db}?schema=public
-      REDIS_URL: redis://redis:6379
-      AI_SERVICE_URL: http://ai-service:8000
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  web:
-    build:
-      context: ./web
-      dockerfile: Dockerfile
-    restart: always
-    environment:
-      NODE_ENV: production
-      PORT: 3000
-      INTERNAL_API_URL: http://api-gateway:3001
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
-      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3001}
-    expose:
-      - "3000"
-    depends_on:
-      - api-gateway
+      DET_SIZE: 480
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1200M
+        reservations:
+          cpus: '0.5'
+          memory: 400M
+    ports:
+      - "8000:8000"
 
 volumes:
-  postgres_data:
-  redis_data:
+  pg_data:
   minio_data:
-  local_storage:
-  insightface_models:
