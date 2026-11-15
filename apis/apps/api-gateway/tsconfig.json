@@ -1,9 +1,17 @@
 {
-  "extends": "./tsconfig.vercel.base.json",
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "./dist",
     "declaration": true,
-    "removeComments": true
+    "removeComments": true,
+    "baseUrl": ".",
+    "paths": {
+      "@framefind/shared-contracts": [
+        "../../packages/shared-contracts/src",
+        "../../packages/shared-contracts/dist",
+        "vendor/shared-contracts/dist"
+      ]
+    }
   },
   "include": ["src/**/*", "test/**/*"]
 }
