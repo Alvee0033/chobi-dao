@@ -99,6 +99,9 @@ export function getApiBaseUrl(): string {
   if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
   if (typeof window !== "undefined") {
     const { hostname, protocol } = window.location;
+    if (hostname.includes("jantrasoft.online")) {
+      return "https://api-chobi.203.96.190.78.sslip.io";
+    }
     if (hostname.includes("sslip.io") && !hostname.startsWith("api-")) {
       return `${protocol}//api-${hostname}`;
     }

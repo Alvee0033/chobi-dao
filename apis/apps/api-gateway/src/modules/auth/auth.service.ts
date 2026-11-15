@@ -352,10 +352,10 @@ export class AuthService {
   // ─── Private helpers ──────────────────────────────────────────────────────
 
   private signAccessToken(sub: string, email: string, role: AccessRole) {
-    return jwt.sign({ sub, email, role }, this.env.JWT_ACCESS_SECRET, { expiresIn: "15m" });
+    return jwt.sign({ sub, email, role }, this.env.JWT_ACCESS_SECRET, { expiresIn: "7d" });
   }
   private signRefreshToken(sub: string, email: string, actorType: AuthActorType) {
-    return jwt.sign({ sub, email, actorType }, this.env.JWT_REFRESH_SECRET, { expiresIn: "7d" });
+    return jwt.sign({ sub, email, actorType }, this.env.JWT_REFRESH_SECRET, { expiresIn: "30d" });
   }
 
   private async issuePhotographerTokens(

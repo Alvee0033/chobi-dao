@@ -968,7 +968,7 @@ function PhotoGalleryView({
         </ClayCard>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-          {eventUploads.map((item) => (
+          {eventUploads.slice(0, 12).map((item) => (
             <ClayCard key={item.id} className="group p-2 relative overflow-hidden bg-white border border-orange-100">
               <div className="aspect-square rounded-xl overflow-hidden relative">
                 <Image src={item.previewObjectUrl} alt={item.fileName} fill className="object-cover opacity-70" unoptimized />
@@ -991,6 +991,12 @@ function PhotoGalleryView({
               </div>
             </ClayCard>
           ))}
+          {eventUploads.length > 12 && (
+            <ClayCard className="p-4 flex flex-col items-center justify-center text-center bg-orange-50/50 border border-dashed border-orange-200">
+              <span className="text-xl font-black text-orange-600">+{eventUploads.length - 12}</span>
+              <span className="text-[10px] font-bold text-muted uppercase tracking-wider mt-1">More in Queue</span>
+            </ClayCard>
+          )}
           {photos.slice(0, visibleCount).map((photo, index) => (
             <GalleryPhotoCard
               key={photo.id}
@@ -1016,7 +1022,12 @@ export function DashboardPage({ setView, showToast, auth, onAuth }: { setView: V
   const router = useRouter();
   const pathname = usePathname();
   const routeState = parseDashboardPath(pathname || "/dashboard");
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const publicOrigin = typeof window !== "undefined"
+    ? (window.location.hostname.includes("jantrasoft.online") || window.location.hostname.includes("sslip.io")
+        ? "https://chobidao.jantrasoft.online"
+        : window.location.origin)
+    : "https://chobidao.jantrasoft.online";
+  const origin = publicOrigin;
   const [activeTab, setActiveTab] = useState<TabId>(routeState.tab);
   const [showNewEvent, setShowNewEvent] = useState(routeState.showNew);
   const [isViewingGallery, setIsViewingGallery] = useState(routeState.gallery);
@@ -1036,9 +1047,9 @@ export function DashboardPage({ setView, showToast, auth, onAuth }: { setView: V
   const uploadQueueRef = useRef<UploadItem[]>([]);
   const uploadWorkersRef = useRef(0);
   const claimedUploadsRef = useRef<Set<string>>(new Set());
-const MAX_PARALLEL_UPLOADS = 3;
-const DIRECT_UPLOAD_MAX_BYTES = 1.5 * 1024 * 1024;
-const DIRECT_UPLOAD_TARGET_BYTES = 1.2 * 1024 * 1024;
+const MAX_PARALLEL_UPLOADS = 4;
+const DIRECT_UPLOAD_MAX_BYTES = 2.5 * 1024 * 1024;
+const DIRECT_UPLOAD_TARGET_BYTES = 1.5 * 1024 * 1024;
 
 async function optimizeImageForDirectUpload(file: File): Promise<File> {
   if (!file.type.startsWith("image/")) return file;
@@ -1156,25 +1167,37 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
     }
   }, [selectedEventId]);
 
+  const refreshPromiseRef = useRef<Promise<string> | null>(null);
   const withRefresh = async <T,>(fn: (token: string) => Promise<T>): Promise<T> => {
     if (!auth) throw new Error("Not authenticated");
     try {
       return await fn(auth.accessToken);
     } catch (error) {
-      if (error instanceof Error && error.message.includes("401")) {
-        const refreshed = await refreshToken(auth.refreshToken);
-        onAuth({
-          ...auth,
-          accessToken: refreshed.accessToken,
-          refreshToken: refreshed.refreshToken,
-          userId: refreshed.photographer.id,
-          email: refreshed.photographer.email,
-          name: refreshed.photographer.name,
-          plan: refreshed.photographer.plan,
-          hasDriveConnected: resolveDriveConnected(refreshed.photographer, Boolean(auth.hasDriveConnected)),
-          driveRootFolderId: refreshed.photographer.driveRootFolderId ?? auth.driveRootFolderId ?? null,
-        });
-        return await fn(refreshed.accessToken);
+      const errStr = error instanceof Error ? error.message : String(error);
+      if (errStr.includes("401") || errStr.toLowerCase().includes("invalid token") || errStr.toLowerCase().includes("unauthorized")) {
+        if (!refreshPromiseRef.current) {
+          refreshPromiseRef.current = (async () => {
+            try {
+              const refreshed = await refreshToken(auth.refreshToken);
+              onAuth({
+                ...auth,
+                accessToken: refreshed.accessToken,
+                refreshToken: refreshed.refreshToken,
+                userId: refreshed.photographer.id,
+                email: refreshed.photographer.email,
+                name: refreshed.photographer.name,
+                plan: refreshed.photographer.plan,
+                hasDriveConnected: resolveDriveConnected(refreshed.photographer, Boolean(auth.hasDriveConnected)),
+                driveRootFolderId: refreshed.photographer.driveRootFolderId ?? auth.driveRootFolderId ?? null,
+              });
+              return refreshed.accessToken;
+            } finally {
+              refreshPromiseRef.current = null;
+            }
+          })();
+        }
+        const newAccessToken = await refreshPromiseRef.current;
+        return await fn(newAccessToken);
       }
       throw error;
     }
@@ -1235,76 +1258,82 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
   };
 
   const runUploadWorkers = async () => {
-    if (uploadWorkersRef.current >= MAX_PARALLEL_UPLOADS) return;
-    const next = uploadQueueRef.current.find((item) => item.status === "queued" && !claimedUploadsRef.current.has(item.id));
-    if (!next) return;
-    claimedUploadsRef.current.add(next.id);
-    uploadWorkersRef.current += 1;
-    const uploadId = next.id;
-    const controller = new AbortController();
-    setUploadQueue((prev) => prev.map((item) => item.id === uploadId ? { ...item, status: "uploading", progress: 0, abort: controller } : item));
-    setUploadingEventId(next.eventId);
-    try {
-      const uploadFile = await optimizeImageForDirectUpload(next.file);
-      const fileHash = next.fileHash ?? await computeFileHash(uploadFile);
-      if (fileHash) {
-        setUploadQueue((prev) => prev.map((item) => item.id === uploadId ? { ...item, fileHash } : item));
-      }
-      const presign = await withRefresh((token) =>
-        createUploadUrl(
-          token,
-          next.eventId,
-          uploadFile.name,
-          uploadFile.type || "image/jpeg",
-          uploadFile.size,
-          fileHash,
-        ),
-      );
-      setUploadQueue((prev) => prev.map((item) => item.id === uploadId ? { ...item, photoId: presign.photoId } : item));
-      if (presign.photoId && next.previewObjectUrl) {
-        localPreviewCache[presign.photoId] = next.previewObjectUrl;
-      }
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("PUT", presign.uploadUrl);
-        const headerEntries = Object.entries(presign.requiredHeaders || {});
-        for (const [key, value] of headerEntries) xhr.setRequestHeader(key, value);
-        xhr.upload.onprogress = (evt) => {
-          if (!evt.lengthComputable) return;
-          const progress = Math.max(1, Math.min(99, Math.round((evt.loaded / evt.total) * 100)));
-          setUploadQueue((prev) => prev.map((item) => item.id === uploadId ? { ...item, progress } : item));
-        };
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) resolve();
-          else reject(new Error(`Upload failed (${xhr.status})`));
-        };
-        xhr.onerror = () => reject(new Error("Network error during upload"));
-        controller.signal.addEventListener("abort", () => {
-          xhr.abort();
-          reject(new Error("Upload canceled"));
-        });
-        xhr.send(uploadFile);
-      });
-      setUploadQueue((prev) => prev.map((item) => item.id === uploadId ? { ...item, status: "processing", progress: 100 } : item));
-      await withRefresh((token) => finalizeUpload(token, next.eventId, [presign.photoId]));
-      showToast(`Uploaded ${next.file.name}`);
-      setUploadQueue((prev) => prev.map((item) => item.id === uploadId ? { ...item, status: "ready" } : item));
-      setEvents(await withRefresh((token) => getEvents(token)));
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : "Upload failed";
-      setUploadQueue((prev) => prev.map((item) => item.id === uploadId ? { ...item, status: msg.includes("canceled") ? "canceled" : "failed", error: msg } : item));
-      if (!msg.includes("canceled")) showToast(`Upload failed: ${msg}`);
-    } finally {
-      claimedUploadsRef.current.delete(uploadId);
-      uploadWorkersRef.current -= 1;
-      if (uploadWorkersRef.current === 0) setUploadingEventId(null);
-      setUploadQueue((prev) => prev.filter((item) => item.id !== uploadId));
+    while (uploadWorkersRef.current < MAX_PARALLEL_UPLOADS) {
+      const next = uploadQueueRef.current.find((item) => item.status === "queued" && !claimedUploadsRef.current.has(item.id));
+      if (!next) break;
+
+      claimedUploadsRef.current.add(next.id);
+      uploadWorkersRef.current += 1;
+      const uploadId = next.id;
+      const controller = new AbortController();
+
+      setUploadQueue((prev) => prev.map((item) => item.id === uploadId ? { ...item, status: "uploading", progress: 0, abort: controller } : item));
+      setUploadingEventId(next.eventId);
+
+      (async () => {
+        try {
+          const uploadFile = await optimizeImageForDirectUpload(next.file);
+          const presign = await withRefresh((token) =>
+            createUploadUrl(
+              token,
+              next.eventId,
+              uploadFile.name,
+              uploadFile.type || "image/jpeg",
+              uploadFile.size,
+            ),
+          );
+
+          setUploadQueue((prev) => prev.map((item) => item.id === uploadId ? { ...item, photoId: presign.photoId } : item));
+          if (presign.photoId && next.previewObjectUrl) {
+            localPreviewCache[presign.photoId] = next.previewObjectUrl;
+          }
+
+          await new Promise<void>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open("PUT", presign.uploadUrl);
+            const headerEntries = Object.entries(presign.requiredHeaders || {});
+            for (const [key, value] of headerEntries) xhr.setRequestHeader(key, value);
+            xhr.upload.onprogress = (evt) => {
+              if (!evt.lengthComputable) return;
+              const progress = Math.max(1, Math.min(99, Math.round((evt.loaded / evt.total) * 100)));
+              setUploadQueue((prev) => prev.map((item) => item.id === uploadId ? { ...item, progress } : item));
+            };
+            xhr.onload = () => {
+              if (xhr.status >= 200 && xhr.status < 300) resolve();
+              else reject(new Error(`Upload failed (${xhr.status})`));
+            };
+            xhr.onerror = () => reject(new Error("Network error during upload"));
+            controller.signal.addEventListener("abort", () => {
+              xhr.abort();
+              reject(new Error("Upload canceled"));
+            });
+            xhr.send(uploadFile);
+          });
+
+          setUploadQueue((prev) => prev.map((item) => item.id === uploadId ? { ...item, status: "processing", progress: 100 } : item));
+          await withRefresh((token) => finalizeUpload(token, next.eventId, [presign.photoId]));
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : "Upload failed";
+          setUploadQueue((prev) => prev.map((item) => item.id === uploadId ? { ...item, status: msg.includes("canceled") ? "canceled" : "failed", error: msg } : item));
+          if (!msg.includes("canceled")) showToast(`Upload failed: ${msg}`);
+        } finally {
+          claimedUploadsRef.current.delete(uploadId);
+          uploadWorkersRef.current -= 1;
+          if (uploadWorkersRef.current === 0) {
+            setUploadingEventId(null);
+            withRefresh((token) => getEvents(token)).then(setEvents).catch(() => {});
+          }
+          setUploadQueue((prev) => prev.filter((item) => item.id !== uploadId));
+          // Trigger next in queue
+          void runUploadWorkers();
+        }
+      })();
     }
   };
 
   useEffect(() => {
     uploadQueueRef.current = uploadQueue;
-    if (uploadQueue.some((item) => item.status === "queued")) {
+    if (uploadQueue.some((item) => item.status === "queued") && uploadWorkersRef.current < MAX_PARALLEL_UPLOADS) {
       void runUploadWorkers();
     }
   }, [uploadQueue]);
@@ -2225,7 +2254,9 @@ function QrBannerModal({
   onClose: () => void;
   showToast: ShowToast;
 }) {
-  const eventUrl = typeof window !== "undefined" ? `${window.location.origin}/e/${event.slug}` : `/e/${event.slug}`;
+  const eventUrl = typeof window !== "undefined"
+    ? `${(window.location.hostname.includes("jantrasoft.online") || window.location.hostname.includes("sslip.io")) ? "https://chobidao.jantrasoft.online" : window.location.origin}/e/${event.slug}`
+    : `https://chobidao.jantrasoft.online/e/${event.slug}`;
   const handleDownload = () => {
     try {
       showToast("Generating high-resolution banner...");
@@ -2477,7 +2508,9 @@ function QrBannerModal({
 
 function PrintableAccessCard({ event, qrData }: { event: EventPayload; qrData: string }) {
   if (!qrData) return null;
-  const eventUrl = typeof window !== "undefined" ? `${window.location.origin}/e/${event.slug}` : `/e/${event.slug}`;
+  const eventUrl = typeof window !== "undefined"
+    ? `${(window.location.hostname.includes("jantrasoft.online") || window.location.hostname.includes("sslip.io")) ? "https://chobidao.jantrasoft.online" : window.location.origin}/e/${event.slug}`
+    : `https://chobidao.jantrasoft.online/e/${event.slug}`;
   
   return (
     <div className="hidden print:block fixed inset-0 bg-white z-[9999]">
