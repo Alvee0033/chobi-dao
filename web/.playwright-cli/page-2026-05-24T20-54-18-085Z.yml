@@ -1,0 +1,112 @@
+- generic [ref=e3]:
+  - navigation [ref=e4]:
+    - generic [ref=e5]:
+      - img "Chobi Dao Logo" [ref=e8] [cursor=pointer]
+      - generic [ref=e9]:
+        - button "Features" [ref=e10] [cursor=pointer]
+        - button "Process" [ref=e11] [cursor=pointer]
+        - button "Pricing" [ref=e12] [cursor=pointer]
+      - button "Photographer Login" [ref=e14] [cursor=pointer]
+  - main [ref=e15]:
+    - generic [ref=e16]:
+      - generic [ref=e17]:
+        - heading "Find your moments instantly." [level=1] [ref=e18]:
+          - text: Find your
+          - generic [ref=e19]:
+            - text: moments
+            - img [ref=e20]
+          - text: instantly.
+        - paragraph [ref=e22]: The premium AI gallery for events. Take a selfie, skip the search, and get your photos delivered in seconds.
+        - generic [ref=e23]:
+          - button "Find My Photos Now" [ref=e24] [cursor=pointer]:
+            - generic [ref=e25]:
+              - img [ref=e26]
+              - text: Find My Photos Now
+          - button "Photographer Portal" [ref=e33] [cursor=pointer]:
+            - text: Photographer Portal
+            - img [ref=e34]
+      - generic [ref=e39]:
+        - generic [ref=e41]:
+          - generic [ref=e42]:
+            - img "Scan QR Code" [ref=e43]
+            - generic [ref=e44]:
+              - generic [ref=e45]: "1"
+              - generic [ref=e46]: Scan QR Code
+          - paragraph [ref=e48]: Scan the event QR or enter link
+        - generic [ref=e50]:
+          - generic [ref=e51]:
+            - img "Scan Face" [ref=e52]
+            - generic [ref=e53]:
+              - generic [ref=e54]: "2"
+              - generic [ref=e55]: Scan Face
+          - paragraph [ref=e57]: Take a quick selfie to find you
+        - generic [ref=e59]:
+          - generic [ref=e60]:
+            - img "Download All" [ref=e61]
+            - generic [ref=e62]:
+              - generic [ref=e63]: "3"
+              - generic [ref=e64]: Download All
+          - paragraph [ref=e66]: Get all your photos instantly
+        - generic [ref=e67]:
+          - button [ref=e68] [cursor=pointer]
+          - button [ref=e69] [cursor=pointer]
+          - button [ref=e70] [cursor=pointer]
+  - generic [ref=e72]:
+    - generic [ref=e73]:
+      - img [ref=e75]
+      - heading "Instant Indexing" [level=3] [ref=e77]
+      - paragraph [ref=e78]: Our AI processes thousands of photos in real-time, making them searchable immediately.
+    - generic [ref=e79]:
+      - img [ref=e81]
+      - heading "Face Recognition" [level=3] [ref=e87]
+      - paragraph [ref=e88]: Take a selfie and find every photo of yourself across the entire event gallery.
+    - generic [ref=e89]:
+      - img [ref=e91]
+      - heading "Secure Delivery" [level=3] [ref=e94]
+      - paragraph [ref=e95]: Private, encrypted galleries ensure your memories are seen only by you.
+  - generic [ref=e97]:
+    - generic [ref=e98]:
+      - generic [ref=e99]: Process
+      - heading "Your Photos, 3 Easy Steps" [level=2] [ref=e100]:
+        - text: Your Photos,
+        - text: 3 Easy Steps
+    - generic [ref=e101]:
+      - generic [ref=e102]:
+        - img "Scan Event QR" [ref=e105]
+        - generic [ref=e107]:
+          - generic [ref=e108]: "01"
+          - heading "Scan Event QR" [level=3] [ref=e109]
+          - paragraph [ref=e110]: Find the unique Chobi Dao QR code at your event. Simply scan it with your phone camera to instantly access the private gallery portal.
+      - generic [ref=e111]:
+        - img "Take a Selfie" [ref=e114]
+        - generic [ref=e116]:
+          - generic [ref=e117]: "02"
+          - heading "Take a Selfie" [level=3] [ref=e118]
+          - paragraph [ref=e119]: Snap a quick selfie. Our advanced AI instantly indexes thousands of event photos and finds every single one where you appear in milliseconds.
+      - generic [ref=e120]:
+        - img "Get Your Pack" [ref=e123]
+        - generic [ref=e125]:
+          - generic [ref=e126]: "03"
+          - heading "Get Your Pack" [level=3] [ref=e127]
+          - paragraph [ref=e128]: Browse through your personal matches and download the full-resolution HD photos directly to your gallery. Fast, secure, and instant.
+  - generic [ref=e131]:
+    - generic [ref=e132]:
+      - heading "Chobi Dao Pro Waitlist" [level=2] [ref=e133]:
+        - text: Chobi Dao
+        - generic [ref=e134]: Pro
+        - generic [ref=e135]: Waitlist
+      - paragraph [ref=e136]: AI-powered delivery, dynamic watermarks, and 4K downloads for pro photographers.
+    - button "Join Pro Waitlist" [ref=e137] [cursor=pointer]
+  - contentinfo [ref=e138]:
+    - generic [ref=e139]:
+      - generic [ref=e140]:
+        - img [ref=e141]
+        - generic [ref=e144]: Chobi dao
+      - paragraph [ref=e145]: AI Event Gallery © 2026
+      - generic [ref=e146]:
+        - link [ref=e147] [cursor=pointer]:
+          - /url: "#"
+          - img [ref=e148]
+        - link [ref=e151] [cursor=pointer]:
+          - /url: "#"
+          - img [ref=e152]

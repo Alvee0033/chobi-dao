@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.vercel.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "declaration": true,
+    "removeComments": true
+  },
+  "include": ["src/**/*", "test/**/*"]
+}

@@ -1,0 +1,266 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Plan {
+  free
+  pro
+  agency
+}
+
+enum EventStatus {
+  draft
+  indexing
+  active
+  paused
+  archived
+  expired
+}
+
+enum PhotoIndexStatus {
+  pending
+  uploaded
+  indexing
+  indexed
+  failed
+}
+
+enum AuthActorType {
+  photographer
+  user
+}
+
+model Photographer {
+  id                    String         @id @default(uuid()) @db.Uuid
+  email                 String         @unique
+  name                  String?
+  passwordHash          String?        @map("password_hash")
+  googleId              String?        @unique @map("google_id")
+  googleAccessToken     String?        @map("google_access_token")  @db.Text
+  googleRefreshToken    String?        @map("google_refresh_token") @db.Text
+  googleTokenExpiresAt  DateTime?      @map("google_token_expires_at") @db.Timestamptz(6)
+  driveRootFolderId     String?        @map("drive_root_folder_id")
+  plan                  Plan           @default(free)
+  stripeCustomerId      String?        @map("stripe_customer_id")
+  createdAt             DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  events                Event[]
+  refreshTokens         RefreshToken[]
+  subscriptions         Subscription[]
+
+  @@map("photographers")
+}
+
+model Event {
+  id            String      @id @default(uuid()) @db.Uuid
+  photographerId String     @map("photographer_id") @db.Uuid
+  slug          String      @unique
+  name          String
+  details       String?
+  eventDate     DateTime?   @map("event_date") @db.Date
+  location      String?
+  coverPhotoKey String?     @map("cover_photo_key")
+  status        EventStatus @default(draft)
+  passwordHash  String?     @map("password_hash")
+  expiresAt     DateTime?   @map("expires_at") @db.Timestamptz(6)
+  totalPhotos   Int         @default(0) @map("total_photos")
+  indexedPhotos Int         @default(0) @map("indexed_photos")
+  deletedAt     DateTime?   @map("deleted_at") @db.Timestamptz(6)
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  photographer  Photographer @relation(fields: [photographerId], references: [id], onDelete: Cascade)
+  photos        Photo[]
+  faceEmbeddings FaceEmbedding[]
+  guestSessions GuestSession[]
+  scanEvents    ScanEvent[]
+  usageCounters UsageCounter[]
+  people        Person[]
+
+  @@index([photographerId, createdAt(sort: Desc)])
+  @@map("events")
+}
+
+model Photo {
+  id                  String           @id @default(uuid()) @db.Uuid
+  eventId             String           @map("event_id") @db.Uuid
+  // Google Drive storage fields
+  driveFileId         String?          @map("drive_file_id")          // Drive file ID for original
+  driveThumbFileId    String?          @map("drive_thumb_file_id")    // Drive file ID for thumbnail
+  driveFolderId       String?          @map("drive_folder_id")        // Drive folder this photo lives in
+  driveWebViewLink    String?          @map("drive_web_view_link")    @db.Text
+  driveThumbnailLink  String?          @map("drive_thumbnail_link")   @db.Text
+  // Legacy S3 fields (kept nullable for backward compat)
+  s3Key               String?          @map("s3_key")
+  s3KeyThumb          String?          @map("s3_key_thumb")
+  // Common metadata
+  fileName            String?          @map("file_name")
+  fileSizeBytes       BigInt?          @map("file_size_bytes")
+  fileHash            String?          @map("file_hash")
+  mimeType            String?          @map("mime_type")
+  imageWidth          Int?             @map("image_width")
+  imageHeight         Int?             @map("image_height")
+  processingErrorCode String?          @map("processing_error_code")
+  indexStatus         PhotoIndexStatus @default(pending) @map("index_status")
+  faceCount           Int              @default(0) @map("face_count")
+  uploadedAt          DateTime         @default(now()) @map("uploaded_at") @db.Timestamptz(6)
+  indexedAt           DateTime?        @map("indexed_at") @db.Timestamptz(6)
+
+  event               Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  faceEmbeddings      FaceEmbedding[]
+  faces               Face[]
+
+  @@index([eventId, indexStatus])
+  @@unique([eventId, fileHash], map: "photos_event_hash_idx")
+  @@map("photos")
+}
+
+model FaceEmbedding {
+  id         String   @id @default(uuid()) @db.Uuid
+  photoId    String   @map("photo_id") @db.Uuid
+  eventId    String   @map("event_id") @db.Uuid
+  embedding  Unsupported("vector(512)")
+  bbox       Json?
+  detScore   Float?   @map("det_score")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  photo      Photo    @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  event      Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@map("face_embeddings")
+}
+
+model GuestSession {
+  id             String   @id @default(uuid()) @db.Uuid
+  eventId         String   @map("event_id") @db.Uuid
+  sessionToken    String   @unique @map("session_token")
+  matchedPhotoIds String[] @default([]) @map("matched_photo_ids")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt       DateTime @map("expires_at") @db.Timestamptz(6)
+
+  event           Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@map("guest_sessions")
+}
+
+model ScanEvent {
+  id        String   @id @default(uuid()) @db.Uuid
+  eventId    String   @map("event_id") @db.Uuid
+  result    String
+  matchCount Int?    @map("match_count")
+  ipHash    String?  @map("ip_hash")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@map("scan_events")
+}
+
+model RefreshToken {
+  id             String    @id @default(uuid()) @db.Uuid
+  photographerId String    @map("photographer_id") @db.Uuid
+  tokenHash      String    @map("token_hash")
+  expiresAt      DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt      DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  photographer   Photographer @relation(fields: [photographerId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model AppUser {
+  id            String             @id @default(uuid()) @db.Uuid
+  email         String             @unique
+  name          String?
+  passwordHash  String             @map("password_hash")
+  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  refreshTokens UserRefreshToken[]
+
+  @@map("users")
+}
+
+model UserRefreshToken {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  tokenHash  String    @map("token_hash")
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user       AppUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_refresh_tokens")
+}
+
+model Subscription {
+  id             String   @id @default(uuid()) @db.Uuid
+  photographerId String   @map("photographer_id") @db.Uuid
+  stripeSubId    String   @unique @map("stripe_sub_id")
+  status         String
+  plan           Plan
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  photographer   Photographer @relation(fields: [photographerId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+model UsageCounter {
+  id             String   @id @default(uuid()) @db.Uuid
+  eventId         String   @map("event_id") @db.Uuid
+  month           String
+  photosCount     Int      @default(0) @map("photos_count")
+  storageBytes    BigInt   @default(0) @map("storage_bytes")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  event           Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, month])
+  @@map("usage_counters")
+}
+
+model InvoiceCache {
+  id        String   @id @default(uuid()) @db.Uuid
+  payload   String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("invoices_cache")
+}
+
+model Person {
+  id          String   @id @default(uuid()) @db.Uuid
+  eventId     String   @map("event_id") @db.Uuid
+  name        String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  faces       Face[]
+
+  @@index([eventId])
+  @@map("people")
+}
+
+model Face {
+  id              String   @id @map("id")
+  photoId         String   @map("photo_id") @db.Uuid
+  personId        String   @map("person_id") @db.Uuid
+  boundingBox     Json     @map("bounding_box")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  photo           Photo    @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  person          Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@index([photoId])
+  @@index([personId])
+  @@map("faces")
+}
