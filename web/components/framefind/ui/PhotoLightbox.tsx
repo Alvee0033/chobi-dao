@@ -104,59 +104,59 @@ export function PhotoLightbox({
     >
       {/* Top Bar */}
       <div
-        className="flex items-center justify-between px-4 sm:px-8 py-4 bg-gradient-to-b from-black/80 to-transparent z-20"
+        className="flex items-center justify-between px-3 sm:px-8 py-3 sm:py-4 bg-gradient-to-b from-black/90 via-black/60 to-transparent z-20 shrink-0 gap-2"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-3">
-          <span className="text-white/80 font-mono text-xs sm:text-sm font-semibold tracking-wider px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/10">
+        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+          <span className="text-white/90 font-mono text-xs sm:text-sm font-bold tracking-wider px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/10 whitespace-nowrap">
             {currentIndex + 1} / {photos.length}
           </span>
           {currentPhoto.similarity && (
-            <span className="flex items-center gap-1.5 text-orange-400 font-sans text-xs font-black px-3 py-1.5 rounded-full bg-orange-500/10 border border-orange-500/20 backdrop-blur-md">
-              <Icons.Sparkles size={12} />
-              {Math.round(currentPhoto.similarity * 100)}% Match
+            <span className="hidden xs:flex items-center gap-1 text-orange-400 font-sans text-xs font-black px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full bg-orange-500/10 border border-orange-500/20 backdrop-blur-md whitespace-nowrap">
+              <Icons.Sparkles size={11} />
+              {Math.round(currentPhoto.similarity * 100)}%
             </span>
           )}
         </div>
 
         {/* Top Actions */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
           {/* Zoom */}
           <button
             onClick={() => setIsZoomed(!isZoomed)}
-            className="w-10 h-10 rounded-full flex items-center justify-center text-white/80 hover:text-white bg-white/10 hover:bg-white/20 border border-white/10 transition-all active:scale-95"
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white/80 hover:text-white bg-white/10 hover:bg-white/20 border border-white/10 transition-all active:scale-95 shrink-0"
             title={isZoomed ? "Zoom out" : "Zoom in"}
           >
-            <Icons.Maximize2 size={16} />
+            <Icons.Maximize2 size={15} />
           </button>
 
           {/* Share */}
           <button
             onClick={handleShare}
-            className="h-10 px-4 rounded-full flex items-center gap-2 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 border border-white/10 text-xs font-bold transition-all active:scale-95"
+            className="w-9 h-9 sm:w-auto sm:h-10 sm:px-3.5 rounded-full flex items-center justify-center gap-1.5 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 border border-white/10 text-xs font-bold transition-all active:scale-95 shrink-0"
             title="Share Photo"
           >
             {isCopied ? <Icons.Check size={14} className="text-green-400" /> : <Icons.Share2 size={14} />}
-            <span className="hidden sm:inline">{isCopied ? "Link Copied!" : "Share"}</span>
+            <span className="hidden sm:inline">{isCopied ? "Copied" : "Share"}</span>
           </button>
 
           {/* Download */}
           <button
             onClick={() => onDownload(currentPhoto.fullUrl, `${slug}-photo-${currentIndex + 1}.jpg`)}
-            className="h-10 px-4 sm:px-5 rounded-full flex items-center gap-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white text-xs font-black shadow-lg shadow-orange-500/30 transition-all active:scale-95"
+            className="h-9 sm:h-10 px-3 sm:px-4 rounded-full flex items-center gap-1.5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white text-xs font-black shadow-lg shadow-orange-500/30 transition-all active:scale-95 shrink-0 whitespace-nowrap"
             title="Download HD Photo"
           >
-            <Icons.Download size={15} />
-            <span>Download HD</span>
+            <Icons.Download size={14} />
+            <span className="hidden xs:inline">HD</span>
           </button>
 
           {/* Close */}
           <button
             onClick={onClose}
-            className="w-10 h-10 rounded-full flex items-center justify-center text-white/80 hover:text-white bg-white/10 hover:bg-white/20 border border-white/10 transition-all active:scale-95 ml-2"
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white/80 hover:text-white bg-white/10 hover:bg-white/20 border border-white/10 transition-all active:scale-95 shrink-0"
             title="Close (Esc)"
           >
-            <Icons.X size={18} />
+            <Icons.X size={17} />
           </button>
         </div>
       </div>
@@ -174,10 +174,10 @@ export function PhotoLightbox({
             e.stopPropagation();
             handlePrev();
           }}
-          className="absolute left-3 sm:left-6 z-10 w-12 h-12 rounded-full flex items-center justify-center text-white bg-black/40 hover:bg-black/70 border border-white/20 backdrop-blur-md transition-all active:scale-95 hover:scale-105"
+          className="absolute left-2 sm:left-6 z-10 w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-white bg-black/50 hover:bg-black/75 border border-white/20 backdrop-blur-md transition-all active:scale-90"
           title="Previous photo (←)"
         >
-          <Icons.ChevronLeft size={24} />
+          <Icons.ChevronLeft size={20} className="sm:w-6 sm:h-6" />
         </button>
 
         <button
@@ -185,16 +185,16 @@ export function PhotoLightbox({
             e.stopPropagation();
             handleNext();
           }}
-          className="absolute right-3 sm:right-6 z-10 w-12 h-12 rounded-full flex items-center justify-center text-white bg-black/40 hover:bg-black/70 border border-white/20 backdrop-blur-md transition-all active:scale-95 hover:scale-105"
+          className="absolute right-2 sm:right-6 z-10 w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-white bg-black/50 hover:bg-black/75 border border-white/20 backdrop-blur-md transition-all active:scale-90"
           title="Next photo (→)"
         >
-          <Icons.ChevronRight size={24} />
+          <Icons.ChevronRight size={20} className="sm:w-6 sm:h-6" />
         </button>
 
         {/* Display Image */}
         <div
-          className={`relative transition-transform duration-300 ease-out cursor-pointer ${
-            isZoomed ? "scale-150 cursor-zoom-out" : "max-w-5xl max-h-[75vh] cursor-zoom-in"
+          className={`relative transition-transform duration-300 ease-out cursor-pointer flex items-center justify-center ${
+            isZoomed ? "scale-150 cursor-zoom-out" : "max-w-5xl max-h-[70vh] sm:max-h-[75vh] cursor-zoom-in"
           }`}
           onClick={(e) => {
             e.stopPropagation();
@@ -204,7 +204,7 @@ export function PhotoLightbox({
           <img
             src={currentPhoto.fullUrl || currentPhoto.thumbMediumUrl || currentPhoto.thumbUrl}
             alt={`Photo ${currentIndex + 1}`}
-            className="max-h-[75vh] w-auto max-w-full object-contain rounded-2xl shadow-2xl ring-1 ring-white/10 select-none"
+            className="max-h-[70vh] sm:max-h-[75vh] w-auto max-w-full object-contain rounded-xl sm:rounded-2xl shadow-2xl ring-1 ring-white/10 select-none"
             draggable={false}
           />
         </div>

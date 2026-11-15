@@ -126,20 +126,22 @@ export class SearchService {
 
     const effectiveApiBase = apiBase || this.env.API_BASE_URL || "";
 
-    const mappedPhotos = photos.map((photo) => {
-      const fullUrl = this.buildMediaUrl(effectiveApiBase, photo.id, "image");
-      const thumbUrl = this.buildMediaUrl(effectiveApiBase, photo.id, "thumb");
+    const mappedPhotos = photos
+      .map((photo) => {
+        const fullUrl = this.buildMediaUrl(effectiveApiBase, photo.id, "image");
+        const thumbUrl = this.buildMediaUrl(effectiveApiBase, photo.id, "thumb");
 
-      return {
-        id: photo.id,
-        thumbUrl,
-        thumbSmallUrl: thumbUrl,
-        thumbMediumUrl: thumbUrl,
-        fullUrl,
-        urlExpiresAt: expiresAt.toISOString(),
-        similarity: similarityMap.get(photo.id) ?? 0.95,
-      };
-    });
+        return {
+          id: photo.id,
+          thumbUrl,
+          thumbSmallUrl: thumbUrl,
+          thumbMediumUrl: thumbUrl,
+          fullUrl,
+          urlExpiresAt: expiresAt.toISOString(),
+          similarity: similarityMap.get(photo.id) ?? 0.95,
+        };
+      })
+      .sort((a, b) => (b.similarity ?? 0) - (a.similarity ?? 0));
 
     return {
       count: mappedPhotos.length,
