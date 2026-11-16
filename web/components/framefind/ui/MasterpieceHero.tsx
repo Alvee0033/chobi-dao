@@ -8,7 +8,7 @@ const STEPS = [
     id: 1,
     title: "Scan QR Code",
     description: "Scan the event QR or enter link",
-    image: "/assets/step1.png",
+    image: "/images/landing/chobidao-event-hero.png",
     color: "from-orange-400 to-orange-600"
   },
   {
@@ -38,59 +38,34 @@ export const MasterpieceHero = () => {
   }, []);
 
   return (
-    <div className="relative w-full h-[350px] sm:h-[500px] lg:h-[650px] flex items-center justify-center">
-      {/* Background Glow */}
-      <div className={`absolute inset-0 transition-all duration-1000 blur-[80px] sm:blur-[120px] opacity-20 bg-gradient-to-br ${STEPS[currentStep].color}`} />
-
-      {/* Main Container */}
-      <div className="relative w-full max-w-[320px] sm:max-w-md lg:max-w-2xl aspect-square flex items-center justify-center">
-        {STEPS.map((step, index) => {
-          const isActive = index === currentStep;
-          return (
-            <div
-              key={step.id}
-              className={`absolute inset-0 transition-all duration-1000 ease-in-out transform
-                ${isActive ? "opacity-100 scale-100 rotate-0 translate-y-0 z-20" : "opacity-0 scale-90 -rotate-6 translate-y-8 lg:translate-y-12 z-10"}`}
-            >
-              {/* Premium Clay Frame - Reduced padding and borders */}
-              <div className="w-full h-full p-1.5 sm:p-2 bg-white rounded-[32px] sm:rounded-[48px] shadow-clay-puffy border-[2px] sm:border-[4px] border-white relative overflow-hidden group">
-                {/* Image Component - Maximize space */}
-                <div className="w-full h-full rounded-[26px] sm:rounded-[42px] overflow-hidden bg-gray-50 relative border border-charcoal/5">
-                  <img
-                    src={step.image}
-                    alt={step.title}
-                    className="w-full h-full object-cover"
-                  />
-                  
-                  {/* Step Badge */}
-                  <div className={`absolute top-4 left-4 sm:top-6 sm:left-6 px-3 py-1 sm:px-5 sm:py-2 rounded-xl sm:rounded-2xl bg-white shadow-clay-card flex items-center gap-2 sm:gap-3 border border-white/50 z-30`}>
-                    <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded-lg bg-gradient-to-br ${step.color} flex items-center justify-center text-white text-[8px] sm:text-[10px] font-black`}>
-                      {step.id}
-                    </div>
-                    <span className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-charcoal">{step.title}</span>
-                  </div>
-                </div>
-
-                {/* Info Overlay */}
-                <div className="absolute bottom-6 left-6 right-6 sm:bottom-10 sm:left-10 sm:right-10 p-3 sm:p-6 bg-white/80 backdrop-blur-xl rounded-2xl sm:rounded-3xl border border-white shadow-clay-card transform translate-y-2 group-hover:translate-y-0 transition-transform">
-                   <p className="text-[10px] sm:text-sm font-bold text-muted leading-tight">{step.description}</p>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-
-        {/* Progress Indicators */}
-        <div className="absolute -bottom-12 left-1/2 -translate-x-1/2 flex gap-3 z-30">
-          {STEPS.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => setCurrentStep(i)}
-              className={`h-2 rounded-full transition-all duration-500 
-                ${i === currentStep ? "w-12 bg-orange-500 shadow-clay-btn" : "w-2 bg-charcoal/10 hover:bg-charcoal/20"}`}
-            />
-          ))}
+    <div className="relative mx-auto flex w-full max-w-[620px] items-center justify-center px-3 py-8 sm:px-8 sm:py-12">
+      <div className="absolute inset-10 rounded-full bg-orange-300/40 blur-[90px]" />
+      <div className="relative w-full rotate-1 rounded-[34px] border border-white/80 bg-white/70 p-2.5 shadow-[0_35px_100px_-35px_rgba(106,52,17,0.4)] backdrop-blur-xl sm:rounded-[46px] sm:p-3">
+        <div className="relative aspect-[4/4.25] overflow-hidden rounded-[27px] bg-[#24180f] sm:rounded-[36px]">
+          <img
+            src={STEPS[0].image}
+            alt="Guests celebrating together at a warmly lit event"
+            className="h-full w-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-transparent to-black/20" />
+          <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full border border-white/35 bg-black/25 px-3 py-2 text-[10px] font-bold tracking-wide text-white backdrop-blur-xl sm:left-6 sm:top-6 sm:px-4 sm:text-xs">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+            LIVE EVENT GALLERY
+          </div>
+          <div className="absolute bottom-5 left-5 right-5 text-white sm:bottom-8 sm:left-8 sm:right-8">
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.22em] text-white/75 sm:text-xs">A night to remember</p>
+            <h2 className="text-2xl font-black leading-tight sm:text-4xl">Every moment.<br />Found in a flash.</h2>
+          </div>
         </div>
+      </div>
+
+      <div className="absolute -left-1 top-[22%] flex -rotate-3 items-center gap-3 rounded-2xl border border-white/80 bg-white/95 p-3 shadow-[0_18px_50px_-20px_rgba(30,25,20,.35)] sm:-left-3 sm:rounded-3xl sm:p-4">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-100 text-xl sm:h-12 sm:w-12 sm:rounded-2xl">✨</div>
+        <div><p className="text-[9px] font-bold uppercase tracking-wider text-charcoal/45 sm:text-[10px]">Your photos are ready</p><p className="text-xs font-black text-charcoal sm:text-sm">We found 28 moments</p></div>
+      </div>
+      <div className="absolute -right-1 bottom-[16%] flex rotate-2 items-center gap-3 rounded-2xl border border-white/80 bg-white/95 p-3 shadow-[0_18px_50px_-20px_rgba(30,25,20,.35)] sm:-right-2 sm:rounded-3xl sm:p-4">
+        <div className="flex -space-x-2"><span className="h-8 w-8 rounded-full border-2 border-white bg-[#d99962] sm:h-10 sm:w-10"/><span className="h-8 w-8 rounded-full border-2 border-white bg-[#723b2b] sm:h-10 sm:w-10"/><span className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-orange-500 text-[9px] font-black text-white sm:h-10 sm:w-10 sm:text-[10px]">+26</span></div>
+        <div><p className="text-[9px] font-bold uppercase tracking-wider text-charcoal/45 sm:text-[10px]">Matched just now</p><p className="text-xs font-black text-charcoal sm:text-sm">Private photo pack</p></div>
       </div>
     </div>
   );

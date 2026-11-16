@@ -4,6 +4,38 @@
 @tailwind components;
 @tailwind utilities;
 
+.landing-shell {
+  background-image:
+    radial-gradient(ellipse at 76% 10%, rgba(255, 195, 137, 0.22), transparent 34rem),
+    radial-gradient(ellipse at 7% 34%, rgba(255, 224, 202, 0.3), transparent 32rem),
+    linear-gradient(180deg, #fffaf5 0%, #faf9f6 48%, #fffaf5 100%);
+}
+
+.landing-shell main {
+  isolation: isolate;
+}
+
+.landing-shell main::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 6rem 0 1rem;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 78% 46%, rgba(251, 146, 60, 0.12), transparent 38%);
+}
+
+.landing-shell section[id="features"] {
+  background: linear-gradient(180deg, rgba(250, 249, 246, 0) 0%, rgba(255, 255, 255, 0.78) 100%);
+}
+
+.landing-shell section[id="features"] > div > div {
+  box-shadow: 0 20px 60px rgba(68, 43, 28, 0.07), 0 2px 10px rgba(68, 43, 28, 0.03);
+}
+
+.landing-shell section[id="process"] > div > div > div {
+  border-radius: 2.5rem;
+}
+
 @layer base {
   body {
     @apply bg-canvas text-charcoal font-sans antialiased overflow-x-hidden scroll-smooth;

@@ -8,7 +8,7 @@ import { Icons } from "../icons";
 import type { ShowToast } from "../types";
 import { ClayCard } from "../ui/ClayCard";
 
-type Phase = "init" | "scan" | "processing" | "success" | "error";
+type Phase = "init" | "camera" | "scan" | "processing" | "success" | "error";
 const captureSteps: { key: ScanStep; label: string; instruction: string }[] = [
   { key: "front", label: "Front", instruction: "Look straight at the camera" },
   { key: "left", label: "Left", instruction: "Turn your head to your left" },
@@ -43,6 +43,8 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
   const voiceEnabledRef = useRef(true);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [phase, setPhase] = useState<Phase>("init");
+  const [startupMessage, setStartupMessage] = useState("Allow camera access to begin");
+  const [guideMode, setGuideMode] = useState<"landmarks" | "timed">("landmarks");
   const [errorMessage, setErrorMessage] = useState("");
   const [capturedImages, setCapturedImages] = useState<string[]>([]);
   const [guidance, setGuidance] = useState<FaceGuidance>("no-face");
@@ -95,6 +97,8 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
     let stableSince = 0;
     let cooldownUntil = 0;
     let stepIndex = 0;
+    let timedStepStart = 0;
+    let modelTimedOut = false;
     const images: string[] = [];
 
     const stopCamera = () => {
@@ -108,6 +112,47 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
     stopScanRef.current = () => {
       stopped = true;
       stopCamera();
+    };
+
+    const captureStep = (video: HTMLVideoElement, timestamp: number) => {
+      images.push(captureFrame(video));
+      setCapturedImages([...images]);
+      stepIndex += 1;
+      stableSince = 0;
+      setHoldProgress(0);
+      cooldownUntil = timestamp + 1000;
+      timedStepStart = timestamp + 1000;
+      if (stepIndex === captureSteps.length) {
+        stopped = true;
+        stopCamera();
+        void completeFlow(images);
+        return;
+      }
+      setGuidance(stepIndex === 1 ? "turn-left" : "turn-right");
+      speak(`Captured. ${captureSteps[stepIndex].instruction}`);
+    };
+
+    const timedScanFrame = (timestamp: number) => {
+      if (stopped) return;
+      const video = videoRef.current;
+      if (video && video.readyState >= 2) {
+        if (!timedStepStart) timedStepStart = timestamp;
+        const elapsed = Math.max(0, timestamp - timedStepStart);
+        setHoldProgress(Math.min(100, Math.round((elapsed / 3000) * 100)));
+        if (elapsed >= 3000) {
+          try {
+            captureStep(video, timestamp);
+            if (stopped) return;
+          } catch (error) {
+            stopped = true;
+            stopCamera();
+            setErrorMessage(error instanceof Error ? error.message : "Camera capture failed.");
+            setPhase("error");
+            return;
+          }
+        }
+      }
+      animationFrame = requestAnimationFrame(timedScanFrame);
     };
 
     const scanFrame = (timestamp: number) => {
@@ -125,30 +170,21 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
             const elapsed = timestamp - stableSince;
             setHoldProgress(Math.min(100, Math.round((elapsed / 800) * 100)));
             if (elapsed >= 800) {
-              images.push(captureFrame(video));
-              setCapturedImages([...images]);
-              stepIndex += 1;
-              stableSince = 0;
-              setHoldProgress(0);
-              cooldownUntil = timestamp + 1000;
-              if (stepIndex === captureSteps.length) {
-                stopped = true;
-                stopCamera();
-                void completeFlow(images);
-                return;
-              }
-              setGuidance(stepIndex === 1 ? "turn-left" : "turn-right");
-              speak(`Captured. ${captureSteps[stepIndex].instruction}`);
+              captureStep(video, timestamp);
+              if (stopped) return;
             }
           } else {
             stableSince = 0;
             setHoldProgress(0);
           }
         } catch (error) {
-          stopped = true;
-          stopCamera();
-          setErrorMessage(error instanceof Error ? error.message : "Camera scan failed.");
-          setPhase("error");
+          modelTimedOut = true;
+          landmarker?.close();
+          landmarker = null;
+          setGuideMode("timed");
+          setHoldProgress(0);
+          speak(`${captureSteps[stepIndex].instruction}. Hold each pose until it captures automatically.`);
+          animationFrame = requestAnimationFrame(timedScanFrame);
           return;
         }
       }
@@ -158,31 +194,62 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
     const start = async () => {
       try {
         if (!navigator.mediaDevices?.getUserMedia) throw new Error("This browser cannot access a camera.");
-        stream = await navigator.mediaDevices.getUserMedia({
+        const cameraRequest = navigator.mediaDevices.getUserMedia({
           video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 640 } },
           audio: false,
         });
+        cameraRequest.then((lateStream) => {
+          if (stopped) lateStream.getTracks().forEach((track) => track.stop());
+        }).catch(() => undefined);
+        stream = await Promise.race([
+          cameraRequest,
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Camera permission took too long. Allow access in your browser and retry.")), 15000)),
+        ]);
         if (stopped) { stopCamera(); return; }
         const video = videoRef.current;
         if (!video) throw new Error("Camera preview is unavailable.");
         video.srcObject = stream;
-        await video.play();
-        const vision = await FilesetResolver.forVisionTasks("/mediapipe/wasm");
-        landmarker = await FaceLandmarker.createFromOptions(vision, {
-          baseOptions: { modelAssetPath: "/mediapipe/face_landmarker.task", delegate: "CPU" },
-          runningMode: "VIDEO",
-          numFaces: 2,
-        });
+        setPhase("camera");
+        setStartupMessage("Camera is on. Loading face guide...");
+        await Promise.race([
+          video.play(),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Camera preview did not start. Please retry.")), 6000)),
+        ]);
+        const modelRequest = (async () => {
+          const vision = await FilesetResolver.forVisionTasks("/mediapipe/wasm");
+          return FaceLandmarker.createFromOptions(vision, {
+            baseOptions: { modelAssetPath: "/mediapipe/face_landmarker.task", delegate: "CPU" },
+            runningMode: "VIDEO",
+            numFaces: 2,
+          });
+        })();
+        modelRequest.then((model) => {
+          if (modelTimedOut || stopped) model.close();
+        }).catch(() => undefined);
+        landmarker = await Promise.race([
+          modelRequest,
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Face guide timed out")), 18000)),
+        ]);
         if (stopped) { stopCamera(); return; }
         setPhase("scan");
         speak(captureSteps[0].instruction);
         animationFrame = requestAnimationFrame(scanFrame);
       } catch (error) {
-        stopCamera();
-        if (!stopped) {
-          setErrorMessage(error instanceof Error ? error.message : "Camera access failed. Check permission and try again.");
-          setPhase("error");
+        if (stopped) return;
+        if (stream && videoRef.current?.readyState && videoRef.current.readyState >= 2) {
+          modelTimedOut = true;
+          landmarker?.close();
+          landmarker = null;
+          setGuideMode("timed");
+          setPhase("scan");
+          speak(`${captureSteps[0].instruction}. Hold each pose until it captures automatically.`);
+          animationFrame = requestAnimationFrame(timedScanFrame);
+          return;
         }
+        stopped = true;
+        stopCamera();
+        setErrorMessage(error instanceof Error ? error.message : "Camera access failed. Check permission and try again.");
+        setPhase("error");
       }
     };
 
@@ -231,7 +298,7 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
 
   const currentStep = captureSteps[Math.min(capturedImages.length, 2)];
   const scanning = phase === "scan";
-  const aligned = scanning && guidance === "hold-still";
+  const aligned = scanning && guideMode === "landmarks" && guidance === "hold-still";
 
   return (
     <div className="min-h-[100dvh] w-full flex flex-col items-center justify-center p-4 md:p-6 selection:bg-orange-200">
@@ -265,9 +332,13 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
           {scanning && <div className="absolute bottom-5 left-1/2 -translate-x-1/2 bg-neutral-900/75 text-white rounded-full px-3 py-1.5 text-[11px] font-black whitespace-nowrap z-20">
             {aligned ? "Hold still" : currentStep.label + " view"}
           </div>}
-          {phase === "init" && <div className="absolute inset-0 bg-neutral-900/90 text-white flex flex-col items-center justify-center gap-3 z-20">
+          {phase === "init" && <div className="absolute inset-0 bg-neutral-900/90 text-white flex flex-col items-center justify-center gap-3 z-20 p-5">
             <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
-            <span className="text-xs font-black">Preparing camera and face guide...</span>
+            <span className="text-xs font-black">{startupMessage}</span>
+          </div>}
+          {phase === "camera" && <div className="absolute bottom-4 left-4 right-4 bg-neutral-900/80 text-white rounded-xl px-3 py-2 text-xs font-bold z-20 flex items-center justify-center gap-2">
+            <span className="w-4 h-4 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
+            {startupMessage}
           </div>}
           {phase === "processing" && <div className="absolute inset-0 bg-white/95 text-orange-600 flex flex-col items-center justify-center gap-3 z-30">
             <div className="w-12 h-12 border-4 border-orange-200 border-t-orange-500 rounded-full animate-spin" />
@@ -283,18 +354,19 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
           </div>}
         </div>
 
+        {phase === "camera" && <p className="text-sm font-bold text-orange-700 mb-4" role="status">Your camera is open. The scan will start automatically.</p>}
         {scanning && <>
           <h2 className="text-xl font-black text-charcoal mb-1" aria-live="polite">{currentStep.instruction}</h2>
           <p className={`text-sm font-bold min-h-10 ${
             aligned ? "text-green-700" : "text-orange-700"
-          }`} role="status" aria-live="polite">{guidanceText[guidance]}</p>
+          }`} role="status" aria-live="polite">{guideMode === "timed" ? "Hold this pose. Capturing automatically..." : guidanceText[guidance]}</p>
           <div className="w-full h-2.5 bg-orange-100 rounded-full overflow-hidden mb-4" role="progressbar" aria-label="Hold still progress" aria-valuenow={holdProgress} aria-valuemin={0} aria-valuemax={100}>
             <div className="h-full bg-green-500 rounded-full transition-[width] duration-200" style={{ width: `${holdProgress}%` }} />
           </div>
         </>}
 
         <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handleFileChange} />
-        {(scanning || phase === "error") && <div className="w-full flex flex-col gap-2">
+        {(scanning || phase === "camera" || phase === "init" || phase === "error") && <div className="w-full flex flex-col gap-2">
           {scanning && <button type="button" onClick={() => {
             const enabled = !voiceEnabled;
             voiceEnabledRef.current = enabled;

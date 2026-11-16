@@ -6,6 +6,7 @@ import { Icons } from "../icons";
 import type { DashboardAuthState, ShowToast, ViewSetter } from "../types";
 import { ClayButton } from "../ui/ClayButton";
 import { ClayCard } from "../ui/ClayCard";
+import "./dashboard-page.css";
 
 type TabId = "events" | "analytics" | "settings";
 type UploadItem = {
@@ -75,79 +76,20 @@ function EventCard({
   onDelete: () => void;
 }) {
   return (
-    <ClayCard
-      onClick={onView}
-      className="group overflow-hidden border-orange-100/50 hover:shadow-clay-pressed transition-all duration-300 bg-white/80 backdrop-blur-sm p-2.5 cursor-pointer active:scale-[0.98]"
-    >
-      <div className="flex flex-row gap-3 items-center">
-        <div className="w-20 h-20 rounded-xl relative bg-orange-50 overflow-hidden shrink-0 shadow-inner border border-orange-100/50">
-          {event.thumbnailUrl ? (
-            <img src={event.thumbnailUrl} alt={event.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
-          ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center text-orange-200 gap-0.5">
-              <Icons.Image className="w-5 h-5 opacity-30" />
-              <span className="text-[7px] font-black uppercase tracking-widest opacity-40">No Img</span>
-            </div>
-          )}
-          <div className="absolute top-1 left-1">
-            <span className={`px-1.5 py-0.5 rounded-md text-[6px] font-black uppercase tracking-wider border shadow-sm ${
-              event.status === "live" ? "bg-green-500 text-white border-green-600" : "bg-orange-500 text-white border-orange-600"
-            }`}>
-              {event.status}
-            </span>
-          </div>
+    <article className="studio-event-card" data-testid="event-card">
+      <button className="studio-event-card-main" type="button" onClick={onView} aria-label={`Manage ${event.name}`}>
+        <div className="studio-event-card-cover">
+          {event.thumbnailUrl ? <img src={event.thumbnailUrl} alt="" /> : <div className="studio-event-card-placeholder"><Icons.Camera size={30} /></div>}
         </div>
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between mb-0.5">
-            <h3 className="font-black text-base text-charcoal truncate pr-2">{event.name}</h3>
-            <div className="flex items-center gap-1 text-muted shrink-0">
-               <Icons.Image className="w-3 h-3 opacity-40" />
-               <span className="text-[9px] font-black">{event.totalPhotos || 0}</span>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-3 mb-2">
-            <p className="text-[9px] text-muted flex items-center gap-1 font-bold truncate">
-              <Icons.MapPin className="w-3 h-3 text-orange-500" />
-              {event.location || "Online"}
-            </p>
-            <p className="text-[9px] text-muted flex items-center gap-1 font-bold">
-              <Icons.Calendar className="w-3 h-3 text-orange-500" />
-              {event.eventDate ? new Date(event.eventDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : "TBD"}
-            </p>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="flex -space-x-1">
-               {[1,2].map(i => (
-                 <div key={i} className="w-5 h-5 rounded-full border border-white bg-orange-100 flex items-center justify-center text-[6px] font-black text-orange-500 shadow-sm">
-                    <Icons.Users className="w-2 h-2" />
-                 </div>
-               ))}
-               <div className="w-5 h-5 rounded-full border border-white bg-orange-50 flex items-center justify-center text-[6px] font-black text-orange-400 shadow-sm">
-                  +3
-               </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete();
-                }}
-                className="p-1.5 rounded-xl bg-red-50 text-red-500 border border-red-100 hover:bg-red-500 hover:text-white transition-all shadow-sm"
-                title="Delete Event"
-              >
-                <Icons.Trash size={14} />
-              </button>
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-500 text-white text-[10px] font-black uppercase tracking-widest shadow-clay-pressed group-hover:scale-105 transition-all">
-                Manage <Icons.ChevronRight size={14} />
-              </div>
-            </div>
-          </div>
+        <div className="studio-event-card-content">
+          <div className="studio-event-card-top"><span className={`studio-event-status studio-event-status-${event.status}`}>{event.status}</span><span className="studio-event-count"><Icons.Image size={14} /> {event.totalPhotos || 0} photos</span></div>
+          <h3>{event.name}</h3>
+          <div className="studio-event-card-meta"><span><Icons.Calendar size={14} />{event.eventDate ? new Date(event.eventDate).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "Date to be set"}</span><span><Icons.MapPin size={14} />{event.location || "Location to be set"}</span></div>
+          <span className="studio-event-card-link">Manage event <Icons.ChevronRight size={16} /></span>
         </div>
-      </div>
-    </ClayCard>
+      </button>
+      <button className="studio-event-card-delete" type="button" onClick={onDelete} aria-label={`Delete ${event.name}`} title="Delete event"><Icons.Trash size={16} /></button>
+    </article>
   );
 }
 
@@ -237,8 +179,8 @@ function EventDetailView({
   };
 
   return (
-    <div className="max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
-      <header className="flex flex-col md:flex-row md:items-center justify-between mb-6 md:mb-10 gap-4 md:gap-6">
+    <div className="studio-event-detail max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
+      <header className="studio-event-detail-head flex flex-col md:flex-row md:items-center justify-between mb-6 md:mb-10 gap-4 md:gap-6">
         <div className="hidden lg:flex items-center gap-4 md:gap-6 min-w-0">
           <button 
             onClick={onBack}
@@ -762,7 +704,7 @@ function PhotoGalleryView({
     : null;
 
   return (
-    <div className="max-w-6xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
+    <div className="studio-photo-gallery max-w-6xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
       <header className="flex items-center justify-between mb-8 gap-4">
         <div className="hidden lg:flex items-center gap-4 min-w-0">
           <button 
@@ -1712,7 +1654,7 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
   const subpageTitle = isViewingGallery ? "Photo Gallery" : (activeEvent?.name || "Event Details");
 
   return (
-    <div className="min-h-screen flex bg-[#faf9f6] w-full relative z-10 font-sans" data-testid="dashboard-page">
+    <div className="studio-dashboard min-h-screen flex bg-[#faf9f6] w-full relative z-10 font-sans" data-testid="dashboard-page">
       {/* Mobile Header (Dynamic & Context-aware) */}
       <header className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-xl border-b border-orange-100 z-[60] px-4 flex items-center justify-between">
         {selectedEventId ? (
@@ -1807,7 +1749,7 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
       </div>
 
       {/* Sidebar - Desktop Only */}
-      <aside className="hidden lg:flex sticky top-0 left-0 z-[70] h-screen bg-white/95 backdrop-blur-2xl border-r border-orange-100/50 p-6 flex-col gap-8 w-72 shrink-0">
+      <aside className="studio-sidebar hidden lg:flex sticky top-0 left-0 z-[70] h-screen bg-white/95 backdrop-blur-2xl border-r border-orange-100/50 p-6 flex-col gap-8 w-72 shrink-0">
         <div className="flex items-center gap-3 text-orange-500 font-heading font-black text-2xl px-2">
           <div className="w-10 h-10 rounded-2xl flex items-center justify-center bg-white shadow-clay-card border border-orange-100">
             <img src="/logo.png" alt="Chobi Dao" className="w-8 h-8 object-contain" />
@@ -1868,7 +1810,7 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
       </aside>
 
       {/* Main Content */}
-      <main className={`flex-1 px-4 py-6 md:p-8 lg:p-12 pt-20 lg:pt-12 overflow-y-auto transition-all ${
+      <main className={`studio-dashboard-main flex-1 px-4 py-6 md:p-8 lg:p-12 pt-20 lg:pt-12 overflow-y-auto transition-all ${
         selectedEventId ? "pb-12" : "pb-24 lg:pb-12"
       }`}>
         {selectedEventId ? (
@@ -1923,9 +1865,10 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
 
             {activeTab === "events" ? (
               <div className="space-y-6">
+                <div className="studio-page-title"><div><p>Workspace / Events</p><h1>Events <span>{events.length}</span></h1></div></div>
                 {/* KPIs - Compact & Side-by-Side */}
                 <div className="grid grid-cols-2 lg:grid-cols-2 gap-3">
-                  <ClayCard className="flex items-center gap-3 p-3 group hover:scale-[1.02] transition-all bg-white border-orange-100 shadow-clay-card relative overflow-hidden min-h-[80px]">
+                  <ClayCard className="studio-kpi flex items-center gap-3 p-3 group hover:scale-[1.02] transition-all bg-white border-orange-100 shadow-clay-card relative overflow-hidden min-h-[80px]">
                     <div className="w-10 h-10 rounded-xl bg-orange-500 flex items-center justify-center text-white shadow-clay-pressed border-2 border-white group-hover:rotate-6 transition-transform relative z-10 flex-shrink-0">
                       <Icons.Camera size={18} />
                     </div>
@@ -1935,7 +1878,7 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
                     </div>
                     <Icons.Camera className="absolute -right-4 -bottom-4 w-16 h-16 opacity-[0.03] -rotate-12" />
                   </ClayCard>
-                  <ClayCard className="flex items-center gap-3 p-3 group hover:scale-[1.02] transition-all bg-white border-blue-100 shadow-clay-card relative overflow-hidden min-h-[80px]">
+                  <ClayCard className="studio-kpi flex items-center gap-3 p-3 group hover:scale-[1.02] transition-all bg-white border-blue-100 shadow-clay-card relative overflow-hidden min-h-[80px]">
                     <div className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center text-white shadow-clay-pressed border-2 border-white group-hover:-rotate-6 transition-transform relative z-10 flex-shrink-0">
                       <Icons.Image size={18} />
                     </div>
@@ -1950,7 +1893,7 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
                 <div className="space-y-4">
 
                   {/* Search & Filters - Compact & Aligned */}
-                  <div className="flex flex-row gap-2 items-center p-1.5 bg-white rounded-2xl shadow-sm border border-orange-100/50">
+                  <div className="studio-search-bar flex flex-row gap-2 items-center p-1.5 bg-white rounded-2xl shadow-sm border border-orange-100/50">
                      <div className="relative flex-1">
                         <Icons.Search className="absolute left-3 top-1/2 -translate-y-1/2 text-orange-400 w-3.5 h-3.5" />
                         <input 
@@ -2030,8 +1973,8 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
 
       {/* New Event Modal */}
       {showNewEvent && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-charcoal/20 backdrop-blur-md animate-in fade-in duration-300">
-          <ClayCard className="w-full max-w-md p-0 max-h-[90vh] overflow-y-auto animate-[float_0.4s_ease-out_forwards] border-orange-100 shadow-2xl">
+        <div className="studio-event-modal fixed inset-0 z-[100] flex items-center justify-center p-4 bg-charcoal/20 backdrop-blur-md animate-in fade-in duration-300">
+          <ClayCard className="studio-event-modal-card w-full max-w-md p-0 max-h-[90vh] overflow-y-auto animate-[float_0.4s_ease-out_forwards] border-orange-100 shadow-2xl">
             <div className="p-6 border-b border-orange-100 bg-orange-50/30">
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-10 h-10 rounded-2xl bg-orange-500 flex items-center justify-center text-white shadow-clay-pressed">

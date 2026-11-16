@@ -10,6 +10,7 @@ async function main() {
   let cursor: string | undefined;
   let inspected = 0;
   let missing = 0;
+  let noFacePhotos = 0;
   let queued = 0;
 
   try {
@@ -32,7 +33,11 @@ async function main() {
       cursor = photos[photos.length - 1].id;
       for (const photo of photos) {
         inspected += 1;
-        if (photo.faceCount === photo._count.faceEmbeddings && photo.faceCount > 0) continue;
+        if (photo.faceCount === 0 && photo._count.faceEmbeddings === 0) {
+          noFacePhotos += 1;
+          continue;
+        }
+        if (photo.faceCount === photo._count.faceEmbeddings) continue;
         missing += 1;
         if (!apply) continue;
         const storageKey = photo.s3Key || photo.driveFileId;
@@ -64,7 +69,7 @@ async function main() {
       prisma.photo.groupBy({ by: ["indexStatus"], _count: { id: true } }),
       queue.getJobCounts("waiting", "active", "delayed", "failed"),
     ]);
-    console.log(JSON.stringify({ inspected, missing, queued, dryRun: !apply, photoStatuses, queueStatuses }));
+    console.log(JSON.stringify({ inspected, missing, noFacePhotos, queued, dryRun: !apply, photoStatuses, queueStatuses }));
   } finally {
     await queue.close();
     await prisma.$disconnect();

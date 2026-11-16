@@ -1,27 +1,41 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { login, signup } from "@/lib/api";
 import { Icons } from "../icons";
 import type { DashboardAuthState, ShowToast, ViewSetter } from "../types";
-import { ClayButton } from "../ui/ClayButton";
-import { ClayCard } from "../ui/ClayCard";
+import "./auth-page.css";
 
 type Mode = "login" | "signup";
 
-export function AuthPage({ setView, showToast, onAuth, initialMode = "login", onModeChange }: { setView: ViewSetter; showToast: ShowToast; onAuth: (auth: DashboardAuthState) => void; initialMode?: Mode; onModeChange?: (mode: Mode) => void }) {
+type AuthPageProps = {
+  setView: ViewSetter;
+  showToast: ShowToast;
+  onAuth: (auth: DashboardAuthState) => void;
+  initialMode?: Mode;
+  onModeChange?: (mode: Mode) => void;
+};
+
+export function AuthPage({ setView, showToast, onAuth, initialMode = "login", onModeChange }: AuthPageProps) {
   const [mode, setMode] = useState<Mode>(initialMode);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!email.trim() || !password.trim()) {
-      showToast("Email and password are required");
-      return;
-    }
-    if (mode === "signup" && !name.trim()) {
-      showToast("Name is required for signup");
+  useEffect(() => setMode(initialMode), [initialMode]);
+
+  const changeMode = (nextMode: Mode) => {
+    setMode(nextMode);
+    setError("");
+    onModeChange?.(nextMode);
+  };
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError("");
+    if (!email.trim() || !password.trim() || (mode === "signup" && !name.trim())) {
+      setError("Complete all required fields to continue.");
       return;
     }
 
@@ -30,7 +44,6 @@ export function AuthPage({ setView, showToast, onAuth, initialMode = "login", on
       const payload = mode === "signup"
         ? await signup(email.trim().toLowerCase(), password, name.trim())
         : await login(email.trim().toLowerCase(), password);
-
       onAuth({
         accessToken: payload.accessToken,
         refreshToken: payload.refreshToken,
@@ -39,126 +52,44 @@ export function AuthPage({ setView, showToast, onAuth, initialMode = "login", on
         name: payload.photographer.name,
         plan: payload.photographer.plan,
         hasDriveConnected: payload.photographer.hasDriveConnected ?? Boolean(payload.photographer.driveRootFolderId),
-        driveRootFolderId: payload.photographer.driveRootFolderId ?? null
+        driveRootFolderId: payload.photographer.driveRootFolderId ?? null,
       });
       showToast(mode === "signup" ? "Account created" : "Logged in");
       setView("dashboard");
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : "Authentication failed");
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "Authentication failed. Please try again.";
+      setError(message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#FAF9F6] flex flex-col items-center justify-center p-6 relative overflow-hidden" data-testid="auth-page">
-      {/* BACKGROUND ELEMENTS */}
-      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-orange-100/30 blur-[120px] rounded-full translate-x-1/2 -translate-y-1/2" />
-      <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-orange-100/20 blur-[120px] rounded-full -translate-x-1/2 translate-y-1/2" />
+    <main className="studio-auth" data-testid="auth-page">
+      <section className="studio-auth-story" aria-label="Chobi Dao for photographers">
+        <img className="studio-auth-photo" src="/images/landing/event-memory.png" alt="Guests enjoying a photographed celebration" />
+        <div className="studio-auth-story-shade" />
+        <a className="studio-auth-brand" href="/" onClick={(event) => { event.preventDefault(); setView("landing"); }}><img src="/logo.png" alt="" />Chobi Dao<span>Studio</span></a>
+        <div className="studio-auth-story-copy"><span className="studio-auth-overline">The photographer workspace</span><h1>Make every<br />moment <em>findable.</em></h1><p>Create an event, deliver your gallery, and give every guest a way to find the photos they love.</p><div className="studio-auth-story-line"><span>01 / Create</span><span>02 / Share</span><span>03 / Discover</span></div></div>
+      </section>
 
-      {/* BACK BUTTON */}
-      <button 
-        onClick={() => setView("landing")} 
-        className="absolute top-8 left-8 flex items-center gap-2 text-charcoal/40 font-black text-[10px] uppercase tracking-[0.2em] hover:text-orange-500 transition-all group"
-      >
-        <Icons.ChevronLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
-        Back to Home
-      </button>
-
-      <div className="w-full max-w-md relative z-10">
-        {/* LOGO & HEADER */}
-        <div className="text-center mb-10">
-          <div className="w-20 h-20 mx-auto mb-6 relative group cursor-pointer" onClick={() => setView("landing")}>
-            <div className="absolute inset-0 bg-orange-500/10 blur-2xl rounded-full scale-0 group-hover:scale-100 transition-transform duration-500" />
-            <img src="/logo.png" alt="Chobi Dao" className="w-full h-full object-contain relative transition-transform duration-500 group-hover:scale-110" />
-          </div>
-          <h1 className="text-3xl font-black text-charcoal tracking-tighter mb-2">
-            Photographer <span className="text-orange-500">Portal</span>
-          </h1>
-          <p className="text-sm font-bold text-charcoal/40 uppercase tracking-widest">
-            {mode === "login" ? "Welcome back, Pro" : "Join the Elite Network"}
-          </p>
+      <section className="studio-auth-form-side">
+        <div className="studio-auth-mobile-brand"><img src="/logo.png" alt="" />Chobi Dao <span>Studio</span></div>
+        <button className="studio-auth-back" type="button" onClick={() => setView("landing")}><Icons.ChevronLeft size={16} /> Back to site</button>
+        <div className="studio-auth-form-wrap">
+          <div className="studio-auth-form-heading"><span className="studio-auth-overline">Your creative workspace</span><h2>{mode === "login" ? "Welcome back." : "Start something beautiful."}</h2><p>{mode === "login" ? "Sign in to manage your events and galleries." : "Create your photographer account to begin."}</p></div>
+          <div className="studio-auth-tabs" role="tablist" aria-label="Account access"><button role="tab" aria-selected={mode === "login"} type="button" onClick={() => changeMode("login")}>Sign in</button><button role="tab" aria-selected={mode === "signup"} type="button" onClick={() => changeMode("signup")}>Create account</button></div>
+          <form onSubmit={submit} data-testid="auth-form" className="studio-auth-form">
+            {mode === "signup" && <div className="studio-auth-field"><label htmlFor="studio-name">Full name</label><input id="studio-name" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Your name" required /></div>}
+            <div className="studio-auth-field"><label htmlFor="studio-email">Email address</label><input id="studio-email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@studio.com" required /></div>
+            <div className="studio-auth-field"><label htmlFor="studio-password">Password</label><div className="studio-auth-password"><input id="studio-password" type={showPassword ? "text" : "password"} autoComplete={mode === "login" ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" required /><button type="button" onClick={() => setShowPassword((current) => !current)} aria-label={showPassword ? "Hide password" : "Show password"}>{showPassword ? "Hide" : "Show"}</button></div></div>
+            {error && <p className="studio-auth-error" role="alert">{error}</p>}
+            <button className="studio-auth-submit" type="submit" disabled={loading}>{loading ? "Please wait…" : mode === "login" ? "Enter your studio" : "Create your account"}<span aria-hidden="true">→</span></button>
+          </form>
+          <p className="studio-auth-footnote">Your event galleries, all in one place.</p>
         </div>
-
-        {/* AUTH CARD */}
-        <ClayCard className="p-2 sm:p-2 border-0 bg-white/60 backdrop-blur-xl shadow-clay-card rounded-[40px]">
-          <div className="p-6 pt-8 space-y-8">
-            {/* TABS */}
-            <div className="flex p-1.5 bg-[#F5F4F0] rounded-[24px] shadow-inner">
-              <button 
-                type="button" 
-                className={`flex-1 py-3 rounded-[18px] text-[11px] font-black uppercase tracking-widest transition-all ${mode === "login" ? "bg-white text-orange-500 shadow-clay-card" : "text-charcoal/30 hover:text-charcoal/60"}`} 
-                onClick={() => { setMode("login"); onModeChange?.("login"); }}
-              >
-                Login
-              </button>
-              <button 
-                type="button" 
-                className={`flex-1 py-3 rounded-[18px] text-[11px] font-black uppercase tracking-widest transition-all ${mode === "signup" ? "bg-white text-orange-500 shadow-clay-card" : "text-charcoal/30 hover:text-charcoal/60"}`} 
-                onClick={() => { setMode("signup"); onModeChange?.("signup"); }}
-              >
-                Join Now
-              </button>
-            </div>
-
-            {/* FORM */}
-            <form onSubmit={submit} className="space-y-4" data-testid="auth-form">
-              {mode === "signup" && (
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-charcoal/40 ml-4">Full Name</label>
-                  <input 
-                    value={name} 
-                    onChange={(e) => setName(e.target.value)} 
-                    placeholder="Enter your name" 
-                    className="w-full bg-[#FAF9F6] border border-charcoal/5 px-6 py-4 rounded-[20px] font-bold text-charcoal text-sm placeholder:text-charcoal/20 shadow-clay-pressed focus:outline-none focus:bg-white focus:border-orange-500/20 transition-all"
-                  />
-                </div>
-              )}
-              
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase tracking-widest text-charcoal/40 ml-4">Email Address</label>
-                <input 
-                  type="email" 
-                  value={email} 
-                  onChange={(e) => setEmail(e.target.value)} 
-                  placeholder="name@studio.com" 
-                  className="w-full bg-[#FAF9F6] border border-charcoal/5 px-6 py-4 rounded-[20px] font-bold text-charcoal text-sm placeholder:text-charcoal/20 shadow-clay-pressed focus:outline-none focus:bg-white focus:border-orange-500/20 transition-all"
-                />
-              </div>
-
-              <div className="space-y-1.5 pb-4">
-                <label className="text-[10px] font-black uppercase tracking-widest text-charcoal/40 ml-4">Secure Password</label>
-                <input 
-                  type="password" 
-                  value={password} 
-                  onChange={(e) => setPassword(e.target.value)} 
-                  placeholder="••••••••" 
-                  className="w-full bg-[#FAF9F6] border border-charcoal/5 px-6 py-4 rounded-[20px] font-bold text-charcoal text-sm placeholder:text-charcoal/20 shadow-clay-pressed focus:outline-none focus:bg-white focus:border-orange-500/20 transition-all"
-                />
-              </div>
-
-              <ClayButton 
-                type="submit" 
-                className="w-full h-16 text-lg !rounded-[24px] shadow-clay-btn relative overflow-hidden group"
-                disabled={loading}
-              >
-                <span className="relative z-10 flex items-center justify-center gap-3">
-                  {loading ? (
-                    <Icons.Activity className="animate-spin" size={20} />
-                  ) : (
-                    <>
-                      {mode === "signup" ? "Start Creating" : "Access Studio"}
-                      <Icons.ChevronRight size={20} />
-                    </>
-                  )}
-                </span>
-                <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
-              </ClayButton>
-            </form>
-          </div>
-        </ClayCard>
-
-      </div>
-    </div>
+        <div className="studio-auth-bottom">© Chobi Dao <span>Made for the moments that matter.</span></div>
+      </section>
+    </main>
   );
 }
