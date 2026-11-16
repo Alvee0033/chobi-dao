@@ -60,7 +60,11 @@ async function main() {
         queued += 1;
       }
     }
-    console.log(JSON.stringify({ inspected, missing, queued, dryRun: !apply }));
+    const [photoStatuses, queueStatuses] = await Promise.all([
+      prisma.photo.groupBy({ by: ["indexStatus"], _count: { id: true } }),
+      queue.getJobCounts("waiting", "active", "delayed", "failed"),
+    ]);
+    console.log(JSON.stringify({ inspected, missing, queued, dryRun: !apply, photoStatuses, queueStatuses }));
   } finally {
     await queue.close();
     await prisma.$disconnect();
