@@ -4,6 +4,7 @@ export const workerEnvSchema = z.object({
   REDIS_URL: z.string(),
   DATABASE_URL: z.string(),
   AI_SERVICE_URL: z.string().default("http://ai-service:8000"),
+  LOCAL_STORAGE_DIR: z.string().default("/storage/uploads"),
   AWS_REGION: z.string().default("us-east-1"),
   AWS_ACCESS_KEY_ID: z.string().optional(),
   AWS_SECRET_ACCESS_KEY: z.string().optional(),

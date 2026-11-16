@@ -104,11 +104,13 @@ export function GuestGalleryPage({
   showToast, 
   slug, 
   photos, 
+  indexingCount = 0,
   onStartOver 
 }: { 
   showToast: ShowToast; 
   slug: string; 
   photos: SearchPhoto[]; 
+  indexingCount?: number;
   sessionToken: string; 
   onStartOver: () => void 
 }) {
@@ -245,6 +247,12 @@ export function GuestGalleryPage({
 
       {/* Main Container */}
       <div className="max-w-5xl mx-auto w-full flex-1">
+        {indexingCount > 0 && (
+          <div className="mb-5 rounded-2xl border border-orange-200 bg-orange-50 p-4 text-sm text-charcoal" role="status">
+            {indexingCount} event photo{indexingCount === 1 ? " is" : "s are"} still processing. More matches may appear later.
+            <button onClick={onStartOver} className="ml-2 font-bold text-orange-700 underline underline-offset-2">Scan again later</button>
+          </div>
+        )}
         {/* Info & Toolbar */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-8 bg-white/60 backdrop-blur-xl p-6 sm:p-8 rounded-3xl border border-orange-100/60 shadow-sm">
           <div>

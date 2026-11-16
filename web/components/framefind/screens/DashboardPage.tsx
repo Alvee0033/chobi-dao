@@ -1049,7 +1049,6 @@ export function DashboardPage({ setView, showToast, auth, onAuth }: { setView: V
   const claimedUploadsRef = useRef<Set<string>>(new Set());
 const MAX_PARALLEL_UPLOADS = 4;
 const DIRECT_UPLOAD_MAX_BYTES = 2.5 * 1024 * 1024;
-const DIRECT_UPLOAD_TARGET_BYTES = 1.5 * 1024 * 1024;
 
 async function optimizeImageForDirectUpload(file: File): Promise<File> {
   if (!file.type.startsWith("image/")) return file;
@@ -1057,7 +1056,7 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
 
   try {
     const bitmap = await createImageBitmap(file);
-    const maxDimension = 1600; // Perfect sweet spot for InsightFace and retina display
+    const maxDimension = 2400;
     const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
     const width = Math.max(1, Math.round(bitmap.width * scale));
     const height = Math.max(1, Math.round(bitmap.height * scale));

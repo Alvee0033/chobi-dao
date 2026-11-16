@@ -12,6 +12,7 @@ function EventPhotosContent({ params }: { params: { slug: string } }) {
   const [toastMsg, setToastMsg] = useState("");
   const [photos, setPhotos] = useState<SearchPhoto[] | null>(null);
   const [sessionToken, setSessionToken] = useState<string>("");
+  const [indexingCount, setIndexingCount] = useState(0);
   const router = useRouter();
   const searchParams = useSearchParams();
   const personId = searchParams ? searchParams.get("personId") : null;
@@ -22,6 +23,7 @@ function EventPhotosContent({ params }: { params: { slug: string } }) {
         .then(res => {
           setPhotos(res);
           setSessionToken("public-person-share");
+          setIndexingCount(0);
         })
         .catch(err => {
           console.error("Failed to load person photos:", err);
@@ -36,6 +38,7 @@ function EventPhotosContent({ params }: { params: { slug: string } }) {
       }
       setPhotos(session.photos);
       setSessionToken(session.sessionToken);
+      setIndexingCount(session.indexingCount ?? 0);
     }
   }, [params.slug, personId, router]);
 
@@ -54,6 +57,7 @@ function EventPhotosContent({ params }: { params: { slug: string } }) {
         slug={params.slug}
         photos={photos}
         sessionToken={sessionToken}
+        indexingCount={indexingCount}
         showToast={setToastMsg}
         onStartOver={() => {
           clearGuestSearchSession(params.slug);

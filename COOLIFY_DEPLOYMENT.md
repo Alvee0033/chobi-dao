@@ -1,7 +1,7 @@
 # Chobi Dao - Turn-Key Coolify & Local Deployment Guide
 
 Chobi Dao is now completely self-hosted with **zero external cloud APIs**:
-- **Face Matching**: High-performance InsightFace (`buffalo_s` ArcFace 512-d embeddings) running locally on CPU/ONNX with PostgreSQL `pgvector` HNSW cosine indexing.
+- **Face Matching**: InsightFace (`buffalo_s` 512-d embeddings) running locally on CPU/ONNX. Larger group photos use overlapping crops to recover small faces.
 - **Object / Photo Storage**: High-speed local S3-compatible MinIO bucket with automatic Sharp WebP thumbnail compression (640px inside) and disk fallback.
 - **Authentication**: Local email and password credentials with JWT access/refresh tokens.
 - **Photographer Portal & Attendee Search**: Full event lifecycle, photo uploads, and visitor face search.
@@ -16,7 +16,7 @@ Chobi Dao is now completely self-hosted with **zero external cloud APIs**:
 3. Choose **Private Repository** (or Git source with this repo) or select **Docker Compose Empty**.
 
 ### Step 2: Configure Docker Compose
-Paste the root [docker-compose.yml](file:///home/alvee/Desktop/Media_and_Design/chobi%20dao%5D/docker-compose.yml) into the compose editor.
+Use the repository's root `docker-compose.yaml` in the Coolify application.
 
 ### Step 3: Environment Variables
 Configure the following in the Coolify **Environment Variables** tab:
@@ -56,7 +56,7 @@ Coolify will build and start all 6 services:
 3. `chobi-minio` & `chobi-minio-init` (creates `chobi-photos` bucket automatically)
 4. `chobi-ai-service` (InsightFace ArcFace 512-d ONNX)
 5. `chobi-api-gateway` (runs `prisma migrate deploy` automatically on boot)
-6. `chobi-worker`
+6. `chobi-worker` (reads originals from the same MinIO bucket and indexes faces asynchronously)
 7. `chobi-web` (Next.js standalone production build)
 
 ---
@@ -77,7 +77,17 @@ docker compose up -d --build
 
 ---
 
-## 3. Database & pgvector Index Verification
+## 3. Face indexing and recovery
+
+The AI service must report `modelReady: true` before uploads can be indexed. Failed indexing stays in the `failed` state and can be retried from the photographer dashboard. New uploads return after storage; face indexing continues in the worker.
+
+The packaged InsightFace pretrained models are designated for non-commercial research. Obtain appropriate model rights before commercial use or switch to a licensed model, then reindex every stored photo and retune match thresholds.
+
+To audit older photos that were marked indexed without usable embeddings, run the compiled `requeue-missing-embeddings.js` script in the API container. It reports counts by default; add `--apply` to enqueue repairs. A repaired photo is hidden from search until indexing succeeds.
+
+`DET_SIZE` defaults to 640 and `MAX_IMAGE_DIM` to 2400. Increasing them or enabling crop analysis raises CPU cost. Match decisions currently require a strong single-view score or agreement across two views; validate those thresholds on labeled event examples before treating them as an accuracy guarantee.
+
+## 4. Database & pgvector Index Verification
 
 The gateway applies migrations automatically. To verify the super-fast HNSW index in PostgreSQL:
 

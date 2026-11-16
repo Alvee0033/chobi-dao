@@ -284,13 +284,13 @@ export async function issueLivenessToken(slug: string): Promise<{ livenessToken:
   });
 }
 
-export async function searchPhotos(slug: string, livenessToken: string, image: string): Promise<{ count: number; photos: SearchPhoto[]; sessionToken: string }> {
-  return json<{ count: number; photos: SearchPhoto[]; sessionToken: string }>(`/v1/search/${encodeURIComponent(slug)}`, {
+export async function searchPhotos(slug: string, livenessToken: string, images: string[]): Promise<{ count: number; photos: SearchPhoto[]; sessionToken: string; indexingCount: number }> {
+  return json<{ count: number; photos: SearchPhoto[]; sessionToken: string; indexingCount: number }>(`/v1/search/${encodeURIComponent(slug)}`, {
     method: "POST",
     headers: {
       "X-Liveness-Token": livenessToken
     },
-    body: JSON.stringify({ image })
+    body: JSON.stringify({ images })
   });
 }
 

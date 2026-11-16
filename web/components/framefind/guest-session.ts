@@ -5,6 +5,7 @@ const guestSessionKey = (slug: string) => `framefind.guest-search.${slug}`;
 export type GuestSearchSession = {
   sessionToken: string;
   photos: SearchPhoto[];
+  indexingCount?: number;
 };
 
 export function saveGuestSearchSession(slug: string, payload: GuestSearchSession) {

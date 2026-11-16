@@ -10,12 +10,12 @@ export class SearchController {
     @Req() req: { headers: { host?: string; "x-forwarded-proto"?: string } },
     @Param("slug") slug: string,
     @Headers("x-liveness-token") livenessToken: string,
-    @Body() dto: { image: string },
+    @Body() dto: { image?: string; images?: string[] },
   ) {
     const proto = req.headers["x-forwarded-proto"] ?? "http";
     const host = req.headers.host ?? "localhost:3001";
     const apiBase = `${proto}://${host}`;
-    return this.search.search(slug, livenessToken, dto.image, apiBase);
+    return this.search.search(slug, livenessToken, dto?.images ?? (dto?.image ? [dto.image] : []), apiBase);
   }
 
   @Post(":slug/zip")

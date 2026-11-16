@@ -2,9 +2,8 @@ import os
 import io
 import logging
 import numpy as np
-from PIL import Image
-from typing import List, Optional
-from fastapi import FastAPI, UploadFile, File
+from PIL import Image, ImageOps, UnidentifiedImageError
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
 
 logger = logging.getLogger("ai-service")
@@ -52,8 +51,8 @@ def startup_event():
         MODEL_READY = True
         logger.info("InsightFace loaded and ready.")
     except Exception as e:
-        logger.warning(f"Could not load InsightFace model directly ({e}). Running in lightweight fallback mode.")
-        MODEL_READY = True
+        logger.error("InsightFace model is unavailable: %s", e)
+        MODEL_READY = False
 
 
 @app.get("/health")
@@ -68,46 +67,68 @@ def health():
 
 @app.get("/ready")
 def ready():
-    if not MODEL_READY:
+    if not MODEL_READY or face_app is None:
         return JSONResponse(status_code=503, content={"ok": False})
     return {"ok": True}
 
 
 @app.post("/analyze")
 async def analyze(file: UploadFile = File(...)):
-    data = await file.read()
-    image = Image.open(io.BytesIO(data)).convert("RGB")
+    if face_app is None:
+        raise HTTPException(status_code=503, detail="Face model unavailable")
+    try:
+        data = await file.read()
+        image = ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB")
+    except (UnidentifiedImageError, OSError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid image") from exc
 
-    # Pre-scale if image exceeds 1600px to protect memory and avoid CPU spikes
-    max_dim = 1600
+    max_dim = int(os.getenv("MAX_IMAGE_DIM", "2400"))
     if max(image.size) > max_dim:
         scale = max_dim / max(image.size)
-        new_size = (int(image.size[0] * scale), int(image.size[1] * scale))
-        image = image.resize(new_size, Image.Resampling.BILINEAR)
+        image = image.resize((max(1, round(image.width * scale)), max(1, round(image.height * scale))), Image.Resampling.LANCZOS)
 
-    arr = np.array(image)
-    h, w = arr.shape[:2]
+    try:
+        return {"faces": detect_faces(image)}
+    except Exception as exc:
+        logger.exception("Face inference failed")
+        raise HTTPException(status_code=503, detail="Face analysis failed") from exc
 
-    faces_result = []
 
-    if face_app is not None:
-        try:
-            # InsightFace expects BGR image array
-            img_bgr = arr[:, :, ::-1]
-            detected_faces = face_app.get(img_bgr)
-            for f in detected_faces:
-                emb = f.embedding
-                if emb is not None:
-                    norm_emb = normalize(emb).tolist()
-                    bbox = [float(x) for x in f.bbox.tolist()] if hasattr(f, "bbox") else [0, 0, w, h]
-                    det_score = float(f.det_score) if hasattr(f, "det_score") else 0.95
-                    faces_result.append({
-                        "bbox": bbox,
-                        "embedding": norm_emb,
-                        "det_score": det_score,
-                    })
-        except Exception as err:
-            logger.error(f"InsightFace inference error: {err}")
+def _iou(a, b):
+    left, top = max(a[0], b[0]), max(a[1], b[1])
+    right, bottom = min(a[2], b[2]), min(a[3], b[3])
+    intersection = max(0, right - left) * max(0, bottom - top)
+    area_a = max(0, a[2] - a[0]) * max(0, a[3] - a[1])
+    area_b = max(0, b[2] - b[0]) * max(0, b[3] - b[1])
+    return intersection / (area_a + area_b - intersection) if area_a + area_b > intersection else 0
 
-    # If no faces found by InsightFace, return empty list
-    return {"faces": faces_result}
+
+def detect_faces(image: Image.Image):
+    """Detect once on the full image, then on overlapping crops for small group faces."""
+    width, height = image.size
+    regions = [(0, 0, width, height)]
+    if max(width, height) >= 1200:
+        tile = min(1200, max(800, round(min(width, height) * 0.65)))
+        stride = round(tile * 0.8)
+        xs = list(range(0, max(1, width - tile + 1), stride))
+        ys = list(range(0, max(1, height - tile + 1), stride))
+        xs.append(max(0, width - tile))
+        ys.append(max(0, height - tile))
+        regions += [(x, y, min(width, x + tile), min(height, y + tile)) for y in sorted(set(ys)) for x in sorted(set(xs))][:12]
+
+    found = []
+    for left, top, right, bottom in regions:
+        crop = image.crop((left, top, right, bottom))
+        for face in face_app.get(np.array(crop)[:, :, ::-1]):
+            embedding = getattr(face, "embedding", None)
+            if embedding is None or not np.isfinite(embedding).all() or np.linalg.norm(embedding) == 0:
+                raise ValueError("Face detector returned an invalid embedding")
+            bbox = [float(face.bbox[0] + left), float(face.bbox[1] + top), float(face.bbox[2] + left), float(face.bbox[3] + top)]
+            score = float(getattr(face, "det_score", 0.0))
+            candidate = {"bbox": bbox, "embedding": normalize(embedding).tolist(), "det_score": score}
+            match_index = next((i for i, previous in enumerate(found) if _iou(previous["bbox"], bbox) >= 0.45), None)
+            if match_index is None:
+                found.append(candidate)
+            elif score > found[match_index]["det_score"]:
+                found[match_index] = candidate
+    return found

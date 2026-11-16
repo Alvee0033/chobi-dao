@@ -6,13 +6,11 @@ import { Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
 import jwt from "jsonwebtoken";
 import { parseEnv } from "../../config/env";
-import { Readable } from "stream";
 import { Queue } from "bullmq";
 
 @Injectable()
 export class UploadService {
   private readonly env = parseEnv();
-  private readonly thumbCache = new Map<string, { body: Buffer; contentType: string; expiresAt: number }>();
   private readonly tokenCache = new Map<string, { token: string; expiresAt: number }>();
   private readonly peopleCache = new Map<string, { value: EventPersonSummary[]; expiresAt: number }>();
   private faceIndexQueue: Queue | null = null;
@@ -36,143 +34,19 @@ export class UploadService {
     this.peopleCache.delete(eventId);
   }
 
-  private async indexFacesInline(eventId: string, photoId: string, bytes: Buffer): Promise<void> {
-    try {
-      const current = await this.prisma.photo.findUnique({ where: { id: photoId }, select: { indexStatus: true } });
-      if (!current || current.indexStatus === "indexed") return;
-
-      let faceCount = 0;
-      try {
-        const formData = new FormData();
-        formData.append("file", new Blob([new Uint8Array(bytes)]), "photo.jpg");
-        const aiRes = await fetch(`${this.env.AI_SERVICE_URL}/analyze`, {
-          method: "POST",
-          body: formData,
-        });
-
-        if (aiRes.ok) {
-          const aiData = (await aiRes.json()) as {
-            faces?: Array<{
-              bbox: [number, number, number, number];
-              embedding: number[];
-              det_score?: number;
-            }>;
-          };
-
-          const detectedFaces = aiData.faces || [];
-          faceCount = detectedFaces.length;
-          let currentPersonCount = await this.prisma.person.count({ where: { eventId } });
-
-          for (const face of detectedFaces) {
-            if (!face.embedding || face.embedding.length !== 512) continue;
-            const faceId = randomUUID();
-            const vectorStr = `[${face.embedding.join(",")}]`;
-
-            // Store in face_embeddings via pgvector
-            try {
-              await this.prisma.$executeRawUnsafe(
-                `INSERT INTO "face_embeddings" ("id", "photo_id", "event_id", "embedding", "bbox", "det_score", "created_at")
-                 VALUES ($1::uuid, $2::uuid, $3::uuid, $4::vector, $5::jsonb, $6, NOW())
-                 ON CONFLICT ("id") DO NOTHING`,
-                faceId,
-                photoId,
-                eventId,
-                vectorStr,
-                JSON.stringify(face.bbox),
-                face.det_score ?? 0.95,
-              );
-            } catch (pgErr) {
-              console.warn("pgvector insert notice:", pgErr);
-            }
-
-            // Cluster or create Person
-            let matchedPersonId: string | null = null;
-            try {
-              const similarRows = await this.prisma.$queryRawUnsafe<Array<{ person_id: string; similarity: number }>>(
-                `SELECT f.person_id, (1 - (fe.embedding <=> $3::vector)) AS similarity
-                 FROM "face_embeddings" fe
-                 JOIN "faces" f ON f.id = fe.id::text
-                 WHERE fe.event_id = $1::uuid 
-                   AND fe.photo_id != $2::uuid
-                   AND (1 - (fe.embedding <=> $3::vector)) >= 0.60
-                 ORDER BY similarity DESC
-                 LIMIT 1`,
-                eventId,
-                photoId,
-                vectorStr,
-              );
-              if (similarRows.length > 0 && similarRows[0].person_id) {
-                matchedPersonId = similarRows[0].person_id;
-              }
-            } catch (clusterErr) {
-              console.error("Upload clustering query error:", clusterErr);
-            }
-
-            if (!matchedPersonId) {
-              currentPersonCount += 1;
-              const person = await this.prisma.person.create({
-                data: { eventId, name: `Person ${currentPersonCount}` },
-              });
-              matchedPersonId = person.id;
-            }
-
-            await this.prisma.face.upsert({
-              where: { id: faceId },
-              update: {
-                photoId,
-                personId: matchedPersonId,
-                boundingBox: {
-                  Left: face.bbox[0],
-                  Top: face.bbox[1],
-                  Width: face.bbox[2] - face.bbox[0],
-                  Height: face.bbox[3] - face.bbox[1],
-                },
-              },
-              create: {
-                id: faceId,
-                photoId,
-                personId: matchedPersonId,
-                boundingBox: {
-                  Left: face.bbox[0],
-                  Top: face.bbox[1],
-                  Width: face.bbox[2] - face.bbox[0],
-                  Height: face.bbox[3] - face.bbox[1],
-                },
-              },
-            });
-          }
-        }
-      } catch (aiErr) {
-        console.warn("Local AI service error during inline indexing:", aiErr);
-      }
-
-      const latest = await this.prisma.photo.findUnique({ where: { id: photoId }, select: { indexStatus: true } });
-      const shouldIncrementIndexed = latest?.indexStatus !== "indexed";
-      await this.prisma.photo.update({
-        where: { id: photoId },
-        data: {
-          indexStatus: "indexed",
-          indexedAt: new Date(),
-          faceCount,
-          processingErrorCode: null,
-        },
-      });
-      await this.prisma.event.update({
-        where: { id: eventId },
-        data: { status: "active", ...(shouldIncrementIndexed ? { indexedPhotos: { increment: 1 } } : {}) },
-      });
-      this.invalidatePeopleCache(eventId);
-    } catch (error) {
-      await this.prisma.photo.update({
-        where: { id: photoId },
-        data: {
-          indexStatus: "indexed",
-          indexedAt: new Date(),
-          faceCount: 0,
-          processingErrorCode: null,
-        },
-      }).catch(() => undefined);
+  private async enqueueFaceIndex(photoId: string, eventId: string, storageKey: string, mimeType: string) {
+    const queue = this.getFaceIndexQueue();
+    const existing = await queue.getJob(photoId);
+    if (existing) {
+      const state = await existing.getState();
+      if (state === "failed" || state === "completed") await existing.remove();
+      else return;
     }
+    await queue.add(
+      "face-index",
+      { photoId, eventId, driveFileId: storageKey, mimeType },
+      { jobId: photoId, attempts: 3, backoff: { type: "exponential", delay: 5000 }, removeOnComplete: true, removeOnFail: 1000 },
+    );
   }
 
   async createUploadUrl(photographerId: string, eventId: string, dto: UploadUrlRequestDto, apiBase: string, authHeader?: string) {
@@ -227,7 +101,6 @@ export class UploadService {
       body,
     );
 
-    const shouldIncrementIndexed = photo.indexStatus !== "indexed";
     await this.prisma.photo.update({
       where: { id: photoId },
       data: {
@@ -244,38 +117,20 @@ export class UploadService {
       },
     });
 
-    // 2. Perform fast local face indexing
-    try {
-      await this.getFaceIndexQueue().add(
-        "face-index",
-        {
-          photoId,
-          eventId,
-          driveFileId: stored.key,
-          mimeType: contentType || photo.mimeType || "image/jpeg",
-        },
-        { attempts: 3, removeOnComplete: true, removeOnFail: 1000 },
-      );
-    } catch {}
-
-    // Inline indexing to ensure instant availability without delay
-    await this.indexFacesInline(eventId, photoId, body);
-
-    await this.prisma.event.update({
-      where: { id: eventId },
-      data: {
-        status: "active",
-        ...(shouldIncrementIndexed ? { indexedPhotos: { increment: 1 } } : {}),
-      },
-    });
-
-    if (body.byteLength <= 8 * 1024 * 1024) {
-      this.thumbCache.set(photoId, {
-        body,
-        contentType: contentType || photo.mimeType || "image/jpeg",
-        expiresAt: Date.now() + 10 * 60 * 1000,
-      });
+    if (event.status !== "active") {
+      await this.prisma.event.update({ where: { id: eventId }, data: { status: "indexing" } });
     }
+
+    try {
+      await this.enqueueFaceIndex(photoId, eventId, stored.key, contentType || photo.mimeType || "image/jpeg");
+    } catch (error) {
+      await this.prisma.photo.update({
+        where: { id: photoId },
+        data: { indexStatus: "failed", processingErrorCode: "INDEX_QUEUE_UNAVAILABLE" },
+      });
+      throw error;
+    }
+
     return { ok: true, key: stored.key };
   }
 
@@ -498,16 +353,6 @@ export class UploadService {
 
   async getPhotoMedia(photoId: string, variant: "image" | "thumb", token: string) {
     this.verifyMediaToken(token, photoId, variant);
-    if (variant === "thumb") {
-      const cached = this.thumbCache.get(photoId);
-      if (cached && cached.expiresAt > Date.now()) {
-        return {
-          stream: Readable.from(cached.body),
-          contentType: cached.contentType || "image/jpeg",
-        };
-      }
-      if (cached && cached.expiresAt <= Date.now()) this.thumbCache.delete(photoId);
-    }
     const photo = await this.prisma.photo.findUnique({
       where: { id: photoId },
     });
@@ -529,7 +374,10 @@ export class UploadService {
     const photo = await this.prisma.photo.findUnique({ where: { id: photoId }, include: { event: true } });
     if (!photo || photo.eventId !== eventId || photo.event.photographerId !== photographerId) throw new NotFoundException("Photo not found");
     if (photo.indexStatus === "indexed") return { ok: true };
-    await this.prisma.photo.update({ where: { id: photoId }, data: { indexStatus: "uploaded" } });
+    const storageKey = photo.s3Key || photo.driveFileId;
+    if (!storageKey) throw new ConflictException("Photo has not been uploaded");
+    await this.prisma.photo.update({ where: { id: photoId }, data: { indexStatus: "uploaded", processingErrorCode: null } });
+    await this.enqueueFaceIndex(photoId, eventId, storageKey, photo.mimeType || "image/jpeg");
     return { ok: true };
   }
 

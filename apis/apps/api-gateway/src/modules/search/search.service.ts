@@ -5,6 +5,7 @@ import { Queue } from "bullmq";
 import jwt from "jsonwebtoken";
 import { parseEnv } from "../../config/env";
 import { randomUUID } from "crypto";
+import { acceptedMatch, cosineSimilarity, MATCH_CANDIDATE_THRESHOLD, SCAN_CONSISTENCY_THRESHOLD } from "./matching";
 
 @Injectable()
 export class SearchService {
@@ -40,7 +41,7 @@ export class SearchService {
     return `${base}/v1/media/photos/${encodeURIComponent(photoId)}/${variant}?t=${encodeURIComponent(t)}`;
   }
 
-  async search(slug: string, livenessToken: string, base64Image?: string, apiBase?: string) {
+  async search(slug: string, livenessToken: string, images: string[], apiBase?: string) {
     if (!livenessToken) throw new UnauthorizedException("Missing liveness token");
     let tokenPayload: { eventSlug: string };
     try {
@@ -53,58 +54,81 @@ export class SearchService {
     const event = await this.prisma.event.findUnique({ where: { slug } });
     if (!event || event.deletedAt) throw new NotFoundException("Event not found");
 
-    if (!base64Image) {
+    if (!Array.isArray(images) || images.length < 1 || images.length > 3) {
       await this.prisma.scanEvent.create({ data: { eventId: event.id, result: "error", matchCount: 0 } });
-      throw new BadRequestException("Missing search image");
+      throw new BadRequestException("Provide one to three face images");
     }
 
-    let matchedPhotoIds: string[] = [];
     const similarityMap = new Map<string, number>();
+    const scoresByPhoto = new Map<string, number[]>();
 
     try {
-      const base64Data = base64Image.replace(/^data:image\/\w+;base64,/, "");
-      const imageBuffer = Buffer.from(base64Data, "base64");
-
-      // 1. Fast Local InsightFace embedding extraction
-      const formData = new FormData();
-      formData.append("file", new Blob([new Uint8Array(imageBuffer)]), "selfie.jpg");
-      const aiRes = await fetch(`${this.env.AI_SERVICE_URL}/analyze`, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (aiRes.ok) {
+      const vectors: string[] = [];
+      const embeddings: number[][] = [];
+      for (const image of images) {
+        if (typeof image !== "string" || image.length > 2_800_000 || !/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(image)) {
+          throw new BadRequestException("Invalid face image format");
+        }
+        const imageBuffer = Buffer.from(image.slice(image.indexOf(",") + 1), "base64");
+        if (imageBuffer.length === 0 || imageBuffer.length > 2 * 1024 * 1024) {
+          throw new BadRequestException("Each face image must be under 2 MB");
+        }
+        const formData = new FormData();
+        formData.append("file", new Blob([new Uint8Array(imageBuffer)]), "face.jpg");
+        const aiRes = await fetch(`${this.env.AI_SERVICE_URL}/analyze`, { method: "POST", body: formData });
+        if (!aiRes.ok) throw new Error(`Face analysis returned ${aiRes.status}`);
         const aiData = (await aiRes.json()) as { faces?: Array<{ embedding: number[]; det_score?: number }> };
-        const mainFace = aiData.faces?.[0];
-        if (mainFace && Array.isArray(mainFace.embedding) && mainFace.embedding.length === 512) {
-          const vectorStr = `[${mainFace.embedding.join(",")}]`;
+        if (aiData.faces?.length !== 1) {
+          throw new BadRequestException("Each image must contain exactly one clear face");
+        }
+        const embedding = aiData.faces[0].embedding;
+        if (!Array.isArray(embedding) || embedding.length !== 512 || !embedding.every(Number.isFinite)) {
+          throw new Error("Invalid face embedding");
+        }
+        if ((aiData.faces[0].det_score ?? 1) < 0.6) {
+          throw new BadRequestException("Face is unclear. Please retake the scan in good lighting");
+        }
+        embeddings.push(embedding);
+        vectors.push(`[${embedding.join(",")}]`);
+      }
 
-          // 2. Ultra-fast pgvector cosine distance search
-          // InsightFace cosine similarity: >= 0.58 ensures accurate same-person matches without false positive crosses
-          const rows = await this.prisma.$queryRawUnsafe<Array<{ photo_id: string; similarity: number }>>(
-            `SELECT photo_id, 1 - (embedding <=> $1::vector) as similarity
-             FROM "face_embeddings"
-             WHERE event_id = $2::uuid AND (1 - (embedding <=> $1::vector)) >= 0.58
-             ORDER BY similarity DESC`,
-            vectorStr,
-            event.id,
-          );
+      if (embeddings.length > 1 && embeddings.slice(1).some((embedding) => cosineSimilarity(embeddings[0], embedding) < SCAN_CONSISTENCY_THRESHOLD)) {
+        throw new BadRequestException("The scan views do not appear to be the same person. Please retake them");
+      }
 
-          for (const r of rows) {
-            matchedPhotoIds.push(r.photo_id);
-            similarityMap.set(r.photo_id, Number(r.similarity));
-          }
+      // Retrieve candidates per view; only confirmed matches are exposed below.
+      for (const [viewIndex, vector] of vectors.entries()) {
+        const rows = await this.prisma.$queryRawUnsafe<Array<{ photo_id: string; similarity: number }>>(
+          `SELECT photo_id, MAX(1 - (embedding <=> $1::vector)) AS similarity
+           FROM "face_embeddings"
+           WHERE event_id = $2::uuid AND (1 - (embedding <=> $1::vector)) >= $3
+           GROUP BY photo_id`,
+          vector,
+          event.id,
+          MATCH_CANDIDATE_THRESHOLD,
+        );
+        for (const row of rows) {
+          const score = Number(row.similarity);
+          const scores = scoresByPhoto.get(row.photo_id) ?? Array(vectors.length).fill(0);
+          scores[viewIndex] = score;
+          scoresByPhoto.set(row.photo_id, scores);
+          similarityMap.set(row.photo_id, Math.max(score, similarityMap.get(row.photo_id) ?? 0));
         }
       }
     } catch (error) {
+      if (error instanceof BadRequestException) throw error;
       console.error("Local face search error:", error);
       await this.prisma.scanEvent.create({ data: { eventId: event.id, result: "error", matchCount: 0 } });
       throw new BadRequestException("Face scan search failed. Please try again with clear lighting.");
     }
 
+    for (const [photoId, scores] of scoresByPhoto) {
+      if (!acceptedMatch(scores)) similarityMap.delete(photoId);
+    }
+
     const photos = await this.prisma.photo.findMany({
       where: {
-        id: { in: matchedPhotoIds },
+        id: { in: [...similarityMap.keys()] },
         eventId: event.id,
         indexStatus: "indexed",
       },
@@ -112,6 +136,9 @@ export class SearchService {
 
     const sessionToken = randomUUID();
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const indexingCount = await this.prisma.photo.count({
+      where: { eventId: event.id, indexStatus: { in: ["pending", "uploaded", "indexing"] } },
+    });
 
     await this.prisma.scanEvent.create({ data: { eventId: event.id, result: "success", matchCount: photos.length } });
 
@@ -147,6 +174,7 @@ export class SearchService {
       count: mappedPhotos.length,
       photos: mappedPhotos,
       sessionToken,
+      indexingCount,
     };
   }
 

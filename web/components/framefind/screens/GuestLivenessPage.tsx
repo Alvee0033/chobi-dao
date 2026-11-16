@@ -7,99 +7,56 @@ import { useRouter } from "next/navigation";
 import { saveGuestSearchSession } from "../guest-session";
 
 type Phase = "init" | "ready" | "scan" | "processing" | "success" | "error";
-
-function loadScript(src: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (typeof document === "undefined") {
-      resolve();
-      return;
-    }
-    if (document.querySelector(`script[src="${src}"]`)) {
-      resolve();
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = src;
-    script.crossOrigin = "anonymous";
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
-    document.head.appendChild(script);
-  });
-}
+const captureSteps = [
+  { label: "front", instruction: "Look straight at the camera" },
+  { label: "left side", instruction: "Turn your head slightly to your left" },
+  { label: "right side", instruction: "Turn your head slightly to your right" },
+] as const;
 
 export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; slug: string }) {
   const [phase, setPhase] = useState<Phase>("init");
   const [errorMessage, setErrorMessage] = useState<string>("");
-  const [hasFace, setHasFace] = useState(false);
-  const [detectionProgress, setDetectionProgress] = useState(0); // 0 to 100 for auto-capture
-  const [faceMeshLoaded, setFaceMeshLoaded] = useState(false);
+  const [capturedImages, setCapturedImages] = useState<string[]>([]);
+  const capturedImagesRef = useRef<string[]>([]);
   const router = useRouter();
   
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const faceMeshRef = useRef<any>(null);
-  const latestResultsRef = useRef<any>(null);
-  const rafRef = useRef<number | null>(null);
-  const consecutivePassRef = useRef<number>(0);
-  const phaseRef = useRef<Phase>("init");
-
-  // Keep ref updated to access inside the requestAnimationFrame loop securely
-  useEffect(() => {
-    phaseRef.current = phase;
-  }, [phase]);
-
   useEffect(() => {
     if (!slug) {
       router.replace("/find");
       return;
     }
 
+    let cancelled = false;
     const bootCamera = async () => {
       try {
         const mediaStream = await navigator.mediaDevices.getUserMedia({ 
           video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 640 } }, 
           audio: false 
         });
+        if (cancelled) {
+          mediaStream.getTracks().forEach((track) => track.stop());
+          return;
+        }
         streamRef.current = mediaStream;
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream;
           await videoRef.current.play();
         }
 
-        // Dynamically load MediaPipe from CDN
-        try {
-          await loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js");
-          if (typeof window !== "undefined" && (window as any).FaceMesh) {
-            const FaceMeshCtor = (window as any).FaceMesh;
-            const fm = new FaceMeshCtor({
-              locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
-            });
-            fm.setOptions({
-              maxNumFaces: 1,
-              refineLandmarks: true,
-              minDetectionConfidence: 0.5,
-              minTrackingConfidence: 0.5
-            });
-            fm.onResults((results: any) => {
-              latestResultsRef.current = results;
-            });
-            faceMeshRef.current = fm;
-            setFaceMeshLoaded(true);
-          }
-        } catch (loaderErr) {
-          console.warn("MediaPipe CDN loader failed, using fast fallback trigger mode:", loaderErr);
-        }
-
         setPhase("ready");
       } catch {
-        setErrorMessage("Camera access failed. Please check camera permission and try again.");
-        setPhase("error");
+        if (!cancelled) {
+          setErrorMessage("Camera access failed. Please check camera permission and try again.");
+          setPhase("error");
+        }
       }
     };
 
     bootCamera();
     return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      cancelled = true;
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
@@ -107,30 +64,13 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
     };
   }, [slug, router]);
 
-  // Capture current canvas frame and trigger search API
-  const completeFlow = useCallback(async () => {
+  // Search with all captured angles and keep only the resulting session.
+  const completeFlow = useCallback(async (images: string[]) => {
     try {
-      const video = videoRef.current;
-      if (!video) throw new Error("Camera not active");
-
       setPhase("processing");
-
-      const canvas = document.createElement("canvas");
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 640;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("Failed to create canvas context");
-
-      // Apply a mirror flip to match the UI camera preview
-      ctx.translate(canvas.width, 0);
-      ctx.scale(-1, 1);
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-      const base64Image = canvas.toDataURL("image/jpeg", 0.85);
-
       const liveness = await issueLivenessToken(slug);
-      const result = await searchPhotos(slug, liveness.livenessToken, base64Image);
-      saveGuestSearchSession(slug, { photos: result.photos, sessionToken: result.sessionToken });
+      const result = await searchPhotos(slug, liveness.livenessToken, images);
+      saveGuestSearchSession(slug, { photos: result.photos, sessionToken: result.sessionToken, indexingCount: result.indexingCount });
       setPhase("success");
       showToast(`Found ${result.count} matched photos!`);
       setTimeout(() => router.push(`/e/${encodeURIComponent(slug)}/photos`), 900);
@@ -140,21 +80,44 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
     }
   }, [slug, router, showToast]);
 
+  const captureAngle = () => {
+    const video = videoRef.current;
+    if (!video || video.readyState < 2 || phase !== "scan") return;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0);
+    const images = [...capturedImagesRef.current, canvas.toDataURL("image/jpeg", 0.82)];
+    if (images.length > captureSteps.length) return;
+    capturedImagesRef.current = images;
+    setCapturedImages(images);
+    if (images.length === captureSteps.length) void completeFlow(images);
+  };
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Fallback: upload selfie from local file or gallery
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!file.type.startsWith("image/") || file.size > 10 * 1024 * 1024) {
+      setErrorMessage("Choose an image under 10 MB.");
+      setPhase("error");
+      return;
+    }
 
+    let objectUrl: string | undefined;
     try {
       setPhase("processing");
       const img = new Image();
-      const objectUrl = URL.createObjectURL(file);
+      const url = URL.createObjectURL(file);
+      objectUrl = url;
       await new Promise((resolve, reject) => {
         img.onload = resolve;
         img.onerror = reject;
-        img.src = objectUrl;
+        img.src = url;
       });
 
       const canvas = document.createElement("canvas");
@@ -173,85 +136,16 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("Canvas context failed");
       ctx.drawImage(img, 0, 0, width, height);
-      URL.revokeObjectURL(objectUrl);
-
       const base64Image = canvas.toDataURL("image/jpeg", 0.85);
-
-      const liveness = await issueLivenessToken(slug);
-      const result = await searchPhotos(slug, liveness.livenessToken, base64Image);
-      saveGuestSearchSession(slug, { photos: result.photos, sessionToken: result.sessionToken });
-      setPhase("success");
-      showToast(`Found ${result.count} matched photos!`);
-      setTimeout(() => router.push(`/e/${encodeURIComponent(slug)}/photos`), 800);
+      await completeFlow([base64Image]);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Selfie upload search failed");
       setPhase("error");
+    } finally {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      e.target.value = "";
     }
   };
-
-  // Capture loop
-  useEffect(() => {
-    if (!videoRef.current) return;
-
-    let cancelled = false;
-
-    const detectLoop = async () => {
-      if (cancelled || !videoRef.current || phaseRef.current !== "scan") return;
-      if (videoRef.current.readyState < 2) {
-        rafRef.current = requestAnimationFrame(detectLoop);
-        return;
-      }
-
-      try {
-        if (faceMeshRef.current) {
-          await faceMeshRef.current.send({ image: videoRef.current });
-          const results = latestResultsRef.current;
-          const face = results?.multiFaceLandmarks?.[0];
-          const detected = !!face;
-          setHasFace(detected);
-
-          if (detected) {
-            // Increase progress quickly when face is in the frame
-            setDetectionProgress((prev) => {
-              const next = prev + 12; // Complete in about 8-9 frames (~250-300ms)
-              if (next >= 100) {
-                // Trigger auto-capture
-                completeFlow();
-                return 100;
-              }
-              return next;
-            });
-          } else {
-            // Gradually decay detection progress when face leaves
-            setDetectionProgress((prev) => Math.max(0, prev - 8));
-          }
-        } else {
-          // Simulation or fast-fallback mode
-          setHasFace(true);
-          setDetectionProgress((prev) => {
-            const next = prev + 10;
-            if (next >= 100) {
-              completeFlow();
-              return 100;
-            }
-            return next;
-          });
-        }
-      } catch (err) {
-        console.error("Auto-capture loop error:", err);
-      }
-
-      if (phaseRef.current === "scan" && !cancelled) {
-        rafRef.current = requestAnimationFrame(detectLoop);
-      }
-    };
-
-    rafRef.current = requestAnimationFrame(detectLoop);
-    return () => {
-      cancelled = true;
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-  }, [phase, completeFlow]);
 
   return (
     <div className="min-h-[100dvh] w-full flex flex-col items-center justify-center p-4 md:p-6 transition-all duration-500 selection:bg-orange-200">
@@ -269,16 +163,16 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
           Instant Face Finder
         </h2>
         <p className="text-xs text-muted font-bold mb-6 max-w-xs mx-auto">
-          Match your face instantly to view your photo gallery.
+          Capture your face from the front and both sides for better matches.
         </p>
 
         {phase === "scan" && (
           <div className="mb-6 text-center w-full animate-fade-in px-2">
-            <span className="text-[10px] font-black text-orange-600 bg-orange-100 border border-orange-200/80 px-3 py-1.5 rounded-full uppercase tracking-wider">
-              {hasFace ? "Face Detected" : "Aligning Camera"}
+            <span className="text-[10px] font-black text-orange-600 bg-orange-100 border border-orange-200/80 px-3 py-1.5 rounded-full uppercase tracking-wider" aria-live="polite">
+              Step {capturedImages.length + 1} of 3
             </span>
             <h3 className="text-xl md:text-2xl font-black text-charcoal mt-3 tracking-tight">
-              {hasFace ? "Hold still for a moment..." : "Center your face in the circle"}
+              {captureSteps[capturedImages.length]?.instruction}
             </h3>
           </div>
         )}
@@ -297,9 +191,7 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
             className={`absolute inset-0 border-4 rounded-full m-1 transition-all duration-300 z-10 ${
               phase === "success" 
                 ? "border-green-400 shadow-[0_0_20px_rgba(74,222,128,0.6)]" 
-                : hasFace 
-                  ? "border-emerald-400 shadow-[0_0_20px_rgba(52,211,153,0.6)]" 
-                  : "border-orange-400/40 border-dashed animate-pulse"
+                : "border-orange-400/40 border-dashed"
             }`} 
           />
 
@@ -318,46 +210,6 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
             </div>
           )}
           
-          {/* Laser scanning beam effect */}
-          {phase === "scan" && (
-            <>
-              <div className="absolute inset-0 overflow-hidden rounded-full z-10 pointer-events-none">
-                <div className="w-full h-1 bg-gradient-to-r from-transparent via-orange-500 to-transparent animate-[scan_2s_ease-in-out_infinite] shadow-[0_0_12px_rgba(249,115,22,0.8)]" />
-              </div>
-              
-              {/* Circular interactive progress bar */}
-              <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-                <svg className="w-full h-full transform -rotate-90">
-                  <circle
-                    cx="50%"
-                    cy="50%"
-                    r="47%"
-                    stroke="rgba(249, 115, 22, 0.15)"
-                    strokeWidth="4"
-                    fill="transparent"
-                  />
-                  <circle
-                    cx="50%"
-                    cy="50%"
-                    r="47%"
-                    stroke="url(#progress-gradient)"
-                    strokeWidth="4"
-                    fill="transparent"
-                    strokeDasharray={`${2 * Math.PI * 135}`}
-                    strokeDashoffset={`${2 * Math.PI * 135 * (1 - detectionProgress / 100)}`}
-                    className="transition-all duration-75 ease-out"
-                  />
-                  <defs>
-                    <linearGradient id="progress-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#f97316" />
-                      <stop offset="100%" stopColor="#fbbf24" />
-                    </linearGradient>
-                  </defs>
-                </svg>
-              </div>
-            </>
-          )}
-
           {/* Processing matching matches state */}
           {phase === "processing" && (
             <div className="absolute inset-0 bg-white/95 text-orange-600 font-bold text-sm flex flex-col items-center justify-center gap-3 z-30 animate-fade-in">
@@ -404,7 +256,7 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
           {phase === "ready" && (
             <>
               <button 
-                onClick={() => setPhase("scan")} 
+                onClick={() => { capturedImagesRef.current = []; setCapturedImages([]); setPhase("scan"); }}
                 className="w-full h-14 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-2xl font-black text-sm transition-all shadow-lg shadow-orange-500/20 active:scale-[0.98] flex items-center justify-center gap-2" 
                 data-testid="start-scan"
               >
@@ -430,11 +282,12 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
 
           {phase === "scan" && (
             <button 
-              onClick={completeFlow} 
-              className="w-full h-14 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-2xl font-black text-sm transition-all shadow-lg shadow-orange-500/25 active:scale-[0.98] animate-pulse flex items-center justify-center gap-2"
+              onClick={captureAngle}
+              className="w-full h-14 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-2xl font-black text-sm transition-all shadow-lg shadow-orange-500/25 active:scale-[0.98] flex items-center justify-center gap-2"
+              data-testid="capture-angle"
             >
               <Icons.Camera size={18} />
-              {hasFace ? "Capturing Now..." : "Snap Photo Instantly"}
+              Capture {captureSteps[capturedImages.length]?.label}
             </button>
           )}
 

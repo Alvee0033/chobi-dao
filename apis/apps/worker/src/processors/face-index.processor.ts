@@ -24,7 +24,7 @@ export class FaceIndexProcessor extends WorkerHost {
 
   private async getPhotoBytes(key: string): Promise<Buffer> {
     // 1. Try local disk
-    const localPath = path.resolve("./storage/uploads", key);
+    const localPath = path.join(path.resolve(this.env.LOCAL_STORAGE_DIR), key);
     if (fs.existsSync(localPath)) {
       return fs.promises.readFile(localPath);
     }
@@ -61,9 +61,13 @@ export class FaceIndexProcessor extends WorkerHost {
     if (!photo || photo.indexStatus === "indexed") return { ok: true };
 
     const storageKey = photo.s3Key || photo.driveFileId || driveFileId;
-    if (!storageKey) return { ok: false, reason: "missing_storage_key" };
 
     try {
+      if (!storageKey) throw new Error(`Photo ${photoId} has no storage key`);
+      await this.prisma.photo.update({ where: { id: photoId }, data: { indexStatus: "indexing", processingErrorCode: null } });
+      // A retry must replace a partial attempt instead of leaving duplicate faces.
+      await this.prisma.face.deleteMany({ where: { photoId } });
+      await this.prisma.$executeRawUnsafe('DELETE FROM "face_embeddings" WHERE "photo_id" = $1::uuid', photoId);
       const bytes = await this.getPhotoBytes(storageKey);
       let faceCount = 0;
 
@@ -77,6 +81,7 @@ export class FaceIndexProcessor extends WorkerHost {
         body: formData,
       });
 
+      if (!aiRes.ok) throw new Error(`Face analysis returned ${aiRes.status}`);
       if (aiRes.ok) {
         const aiData = (await aiRes.json()) as {
           faces?: Array<{
@@ -91,13 +96,14 @@ export class FaceIndexProcessor extends WorkerHost {
         let currentPersonCount = await this.prisma.person.count({ where: { eventId } });
 
         for (const face of detectedFaces) {
-          if (!face.embedding || face.embedding.length !== 512) continue;
+          if (!Array.isArray(face.embedding) || face.embedding.length !== 512 || !face.embedding.every(Number.isFinite)) {
+            throw new Error("Face analysis returned an invalid embedding");
+          }
           const faceId = randomUUID();
           const vectorStr = `[${face.embedding.join(",")}]`;
 
           // Store in face_embeddings via pgvector
-          try {
-            await this.prisma.$executeRawUnsafe(
+          await this.prisma.$executeRawUnsafe(
               `INSERT INTO "face_embeddings" ("id", "photo_id", "event_id", "embedding", "bbox", "det_score", "created_at")
                VALUES ($1::uuid, $2::uuid, $3::uuid, $4::vector, $5::jsonb, $6, NOW())
                ON CONFLICT ("id") DO NOTHING`,
@@ -108,9 +114,6 @@ export class FaceIndexProcessor extends WorkerHost {
               JSON.stringify(face.bbox),
               face.det_score ?? 0.95,
             );
-          } catch (pgErr) {
-            console.warn("Worker pgvector insert notice:", pgErr);
-          }
 
           // Match or create person
           let matchedPersonId: string | null = null;
@@ -190,9 +193,9 @@ export class FaceIndexProcessor extends WorkerHost {
       console.error(`Worker error indexing photo ${photoId}:`, error);
       await this.prisma.photo.update({
         where: { id: photoId },
-        data: { indexStatus: "indexed", faceCount: 0 },
+        data: { indexStatus: "failed", faceCount: 0, processingErrorCode: "FACE_INDEX_FAILED" },
       }).catch(() => undefined);
-      return { ok: true };
+      throw error;
     }
   }
 }
