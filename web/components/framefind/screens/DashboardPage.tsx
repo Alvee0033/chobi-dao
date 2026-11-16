@@ -79,7 +79,7 @@ function EventCard({
     <article className="studio-event-card" data-testid="event-card">
       <button className="studio-event-card-main" type="button" onClick={onView} aria-label={`Manage ${event.name}`}>
         <div className="studio-event-card-cover">
-          {event.thumbnailUrl ? <img src={event.thumbnailUrl} alt="" /> : <div className="studio-event-card-placeholder"><Icons.Camera size={30} /></div>}
+          {event.thumbnailUrl ? <img src={event.thumbnailUrl} alt="" loading="lazy" decoding="async" /> : <div className="studio-event-card-placeholder"><Icons.Camera size={30} /></div>}
         </div>
         <div className="studio-event-card-content">
           <div className="studio-event-card-top"><span className={`studio-event-status studio-event-status-${event.status}`}>{event.status}</span><span className="studio-event-count"><Icons.Image size={14} /> {event.totalPhotos || 0} photos</span></div>
@@ -450,10 +450,9 @@ const GalleryPhotoCard = memo(function GalleryPhotoCard({
           src={currentSrc}
           alt={photo.fileName}
           className={`w-full h-full object-cover transition-all duration-500 group-hover:scale-110 ${loaded ? "opacity-100" : "opacity-0"}`}
-          loading={index < 12 ? "eager" : "lazy"}
+          loading={index < 4 ? "eager" : "lazy"}
           decoding="async"
-          // @ts-ignore
-          fetchpriority={index < 12 ? "high" : "auto"}
+          fetchPriority={index < 2 ? "high" : "low"}
           onLoad={() => setLoaded(true)}
           onError={handleError}
         />
@@ -551,11 +550,11 @@ function PhotoGalleryView({
   const [personMenuOpenId, setPersonMenuOpenId] = useState<string | null>(null);
   const [personMenuPosition, setPersonMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [visibleCount, setVisibleCount] = useState(24);
+  const [visibleCount, setVisibleCount] = useState(16);
 
   // Reset visible count if selected person or eventId changes
   useEffect(() => {
-    setVisibleCount(24);
+    setVisibleCount(16);
   }, [eventId, selectedPersonId]);
 
   useEffect(() => {
@@ -564,10 +563,10 @@ function PhotoGalleryView({
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
-          setVisibleCount((prev) => Math.min(prev + 24, photos.length));
+          setVisibleCount((prev) => Math.min(prev + 16, photos.length));
         }
       },
-      { threshold: 0.1, rootMargin: "600px" }
+      { threshold: 0.1, rootMargin: "300px" }
     );
 
     const target = document.getElementById("load-more-dashboard-trigger");
@@ -581,25 +580,6 @@ function PhotoGalleryView({
       }
     };
   }, [visibleCount, photos.length]);
-
-  // Prefetch the next page of thumbnails in the background when idle
-  useEffect(() => {
-    if (photos.length <= visibleCount) return;
-    
-    const prefetchBatch = photos.slice(visibleCount, visibleCount + 24);
-    const timeoutId = setTimeout(() => {
-      prefetchBatch.forEach((photo) => {
-        const candidates = resolveThumbCandidates(photo);
-        const src = candidates[0];
-        if (src) {
-          const img = new window.Image();
-          img.src = src;
-        }
-      });
-    }, 800); // Wait 800ms to let page rendering settle first
-
-    return () => clearTimeout(timeoutId);
-  }, [visibleCount, photos]);
 
   const handlePersonLongPressStart = (personId: string) => {
     longPressTimerRef.current = setTimeout(() => {
@@ -615,7 +595,7 @@ function PhotoGalleryView({
   };
 
   const resolveThumbCandidates = (photo: EventPhoto): string[] => {
-    const candidates = [localPreviewCache[photo.id], photo.thumbUrl, photo.thumbSmallUrl, photo.thumbMediumUrl, photo.url].filter(Boolean) as string[];
+    const candidates = [localPreviewCache[photo.id], photo.thumbSmallUrl, photo.thumbMediumUrl, photo.thumbUrl, photo.url].filter(Boolean) as string[];
     return [...new Set(candidates)];
   };
 
@@ -624,11 +604,6 @@ function PhotoGalleryView({
       if (!silent) setLoading(true);
       const data = await withRefresh((token) => getEventPhotos(token, eventId, true, selectedPersonId ?? undefined));
       setPhotos(data);
-      data.slice(0, 8).forEach((photo) => {
-        const src = resolveThumbCandidates(photo)[0];
-        const img = new window.Image();
-        img.src = src;
-      });
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Failed to load photos");
     } finally {
@@ -1705,7 +1680,7 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
         ) : (
           <>
             <div className="flex items-center gap-2 text-orange-500 font-heading font-black text-xl">
-              <img src="/logo.png" alt="Chobi Dao" className="w-7 h-7 object-contain" />
+              <img src="/logo-mark.webp" alt="Chobi Dao" className="w-7 h-7 object-contain" />
               <span>Chobi dao</span>
             </div>
             <button 
@@ -1752,7 +1727,7 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
       <aside className="studio-sidebar hidden lg:flex sticky top-0 left-0 z-[70] h-screen bg-white/95 backdrop-blur-2xl border-r border-orange-100/50 p-6 flex-col gap-8 w-72 shrink-0">
         <div className="flex items-center gap-3 text-orange-500 font-heading font-black text-2xl px-2">
           <div className="w-10 h-10 rounded-2xl flex items-center justify-center bg-white shadow-clay-card border border-orange-100">
-            <img src="/logo.png" alt="Chobi Dao" className="w-8 h-8 object-contain" />
+            <img src="/logo-mark.webp" alt="Chobi Dao" className="w-8 h-8 object-contain" />
           </div>
           <span className="tracking-tight">Chobi dao</span>
         </div>
@@ -2389,7 +2364,7 @@ function QrBannerModal({
             
             <div className="text-center w-full">
               <div className="flex items-center justify-center gap-1 mb-2">
-                <img src="/logo.png" alt="Chobi Dao" className="w-4 h-4 object-contain" />
+                <img src="/logo-mark.webp" alt="Chobi Dao" className="w-4 h-4 object-contain" />
                 <h2 className="text-[10px] font-black text-charcoal tracking-tight uppercase">Chobi Dao</h2>
               </div>
               <h1 className="text-sm font-black text-charcoal mb-0.5 truncate uppercase px-2" title={event.name}>{event.name}</h1>
@@ -2499,7 +2474,7 @@ function PrintableAccessCard({ event, qrData }: { event: EventPayload; qrData: s
               <img src={qrData} alt="QR Code" className="w-[400px] h-[400px]" />
             </div>
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-white rounded-3xl shadow-2xl border-4 border-orange-500 flex items-center justify-center">
-               <img src="/logo.png" alt="Chobi Dao logo" className="w-12 h-12 object-contain" />
+               <img src="/logo-mark.webp" alt="Chobi Dao logo" className="w-12 h-12 object-contain" />
             </div>
           </div>
 

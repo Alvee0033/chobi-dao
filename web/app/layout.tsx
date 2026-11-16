@@ -6,9 +6,9 @@ export const metadata: Metadata = {
   title: "Chobi dao",
   description: "AI event photo retrieval",
   icons: {
-    icon: "/logo.png",
-    shortcut: "/logo.png",
-    apple: "/logo.png",
+    icon: "/favicon-64.png",
+    shortcut: "/favicon-64.png",
+    apple: "/apple-touch-icon.png",
   },
 };
 

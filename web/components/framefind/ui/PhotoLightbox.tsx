@@ -206,6 +206,8 @@ export function PhotoLightbox({
             alt={`Photo ${currentIndex + 1}`}
             className="max-h-[70vh] sm:max-h-[75vh] w-auto max-w-full object-contain rounded-xl sm:rounded-2xl shadow-2xl ring-1 ring-white/10 select-none"
             draggable={false}
+            decoding="async"
+            fetchPriority="high"
           />
         </div>
       </div>
@@ -234,6 +236,8 @@ export function PhotoLightbox({
                 alt={`Thumb ${idx + 1}`}
                 className="w-full h-full object-cover"
                 loading="lazy"
+                decoding="async"
+                fetchPriority="low"
               />
             </button>
           ))}

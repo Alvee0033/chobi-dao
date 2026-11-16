@@ -303,7 +303,7 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
   return (
     <div className="min-h-[100dvh] w-full flex flex-col items-center justify-center p-4 md:p-6 selection:bg-orange-200">
       <button onClick={() => router.push("/")} className="absolute top-6 left-6 flex items-center gap-3 text-orange-600 font-heading font-black text-2xl z-50">
-        <img src="/logo.png" alt="Chobi Dao" className="w-9 h-9 object-contain" />
+        <img src="/logo-mark.webp" alt="Chobi Dao" className="w-9 h-9 object-contain" />
         <span>Chobi dao</span>
       </button>
 

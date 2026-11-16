@@ -5,7 +5,6 @@ import type { ShowToast } from "../types";
 import { ClayButton } from "../ui/ClayButton";
 import { ClayCard } from "../ui/ClayCard";
 import { PhotoLightbox } from "../ui/PhotoLightbox";
-import Image from "next/image";
 
 // Memoized PhotoCard to prevent unnecessary grid re-renders
 const PhotoCard = memo(function PhotoCard({
@@ -49,9 +48,9 @@ const PhotoCard = memo(function PhotoCard({
         <img
           src={photo.thumbSmallUrl || photo.thumbMediumUrl || photo.thumbUrl || ""}
           alt={`Event photo ${idx + 1}`}
-          loading={idx < 8 ? "eager" : "lazy"}
-          // @ts-ignore
-          fetchpriority={idx < 8 ? "high" : "low"}
+          loading={idx < 4 ? "eager" : "lazy"}
+          decoding="async"
+          fetchPriority={idx < 2 ? "high" : "low"}
           className={`w-full h-full object-cover transition-all duration-500 ${
             isSelected ? "scale-105 brightness-90" : "group-hover:scale-110"
           }`}
@@ -116,12 +115,12 @@ export function GuestGalleryPage({
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isSelectMode, setIsSelectMode] = useState(false);
-  const [visibleCount, setVisibleCount] = useState(24);
+  const [visibleCount, setVisibleCount] = useState(16);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   // Reset visible count if photos array changes
   useEffect(() => {
-    setVisibleCount(24);
+    setVisibleCount(16);
   }, [photos]);
 
   useEffect(() => {
@@ -130,10 +129,10 @@ export function GuestGalleryPage({
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
-          setVisibleCount((prev) => Math.min(prev + 24, photos.length));
+          setVisibleCount((prev) => Math.min(prev + 16, photos.length));
         }
       },
-      { threshold: 0.1, rootMargin: "600px" }
+      { threshold: 0.1, rootMargin: "300px" }
     );
 
     const target = document.getElementById("load-more-trigger");
@@ -147,24 +146,6 @@ export function GuestGalleryPage({
       }
     };
   }, [visibleCount, photos.length]);
-
-  // Prefetch the next page of thumbnails in the background when idle
-  useEffect(() => {
-    if (photos.length <= visibleCount) return;
-    
-    const prefetchBatch = photos.slice(visibleCount, visibleCount + 24);
-    const timeoutId = setTimeout(() => {
-      prefetchBatch.forEach((photo) => {
-        const url = photo.thumbSmallUrl || photo.thumbMediumUrl || photo.thumbUrl;
-        if (url) {
-          const img = new window.Image();
-          img.src = url;
-        }
-      });
-    }, 800);
-
-    return () => clearTimeout(timeoutId);
-  }, [visibleCount, photos]);
 
   const downloadSinglePhoto = useCallback(async (photoUrl: string, filename: string) => {
     try {
@@ -233,7 +214,7 @@ export function GuestGalleryPage({
       {/* Header */}
       <header className="flex justify-between items-center max-w-5xl w-full mx-auto py-4 mb-8 bg-white/60 backdrop-blur-xl px-6 rounded-3xl border border-orange-100/60 shadow-sm">
         <div className="flex items-center gap-3 text-orange-600 font-heading font-black text-2xl tracking-tight cursor-pointer" onClick={onStartOver}>
-          <img src="/logo.png" alt="Chobi Dao" className="w-9 h-9 object-contain drop-shadow-md" />
+          <img src="/logo-mark.webp" alt="Chobi Dao" className="w-9 h-9 object-contain drop-shadow-md" />
           <span>Chobi dao</span>
         </div>
         <button 
