@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { BackgroundBlobs } from "@/components/framefind/ui/BackgroundBlobs";
 import { Icons } from "@/components/framefind/icons";
 import { ClayCard } from "@/components/framefind/ui/ClayCard";
+import { InAppBrowserNotice } from "@/components/framefind/InAppBrowserNotice";
 
 import { getApiBaseUrl } from "@/lib/api";
 
@@ -72,6 +73,7 @@ export default async function EventLandingPage({ params }: { params: { slug: str
     <div className="min-h-screen relative font-sans selection:bg-orange-200 selection:text-orange-900">
       <BackgroundBlobs />
       <div className="min-h-screen flex flex-col items-center justify-center p-4 relative z-10">
+        <InAppBrowserNotice />
         <Link 
           href="/" 
           className="absolute top-6 left-6 flex items-center gap-3 text-orange-600 font-heading font-black text-2xl hover:scale-105 transition-all drop-shadow-sm"
@@ -80,7 +82,7 @@ export default async function EventLandingPage({ params }: { params: { slug: str
           <span>Chobi dao</span>
         </Link>
 
-        <ClayCard className="w-full max-w-md text-center flex flex-col items-center p-8 bg-white/40 backdrop-blur-md rounded-3xl border border-orange-100/50 shadow-xl">
+        <ClayCard className="w-full max-w-md text-center flex flex-col items-center p-8 bg-white/40 backdrop-blur-md rounded-3xl border border-orange-100/50 shadow-xl mt-12 sm:mt-0">
           <div className="w-16 h-16 rounded-[22px] bg-gradient-to-tr from-orange-500 to-amber-400 text-white flex items-center justify-center mb-6 shadow-lg shadow-orange-500/20">
             <Icons.FaceId size={28} className="stroke-[2.5]" />
           </div>

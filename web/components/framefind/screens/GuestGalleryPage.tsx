@@ -5,7 +5,7 @@ import type { ShowToast } from "../types";
 import { ClayButton } from "../ui/ClayButton";
 import { ClayCard } from "../ui/ClayCard";
 import { PhotoLightbox } from "../ui/PhotoLightbox";
-import { isRestrictedInAppBrowser, openInSystemBrowser, downloadPhoto } from "@/lib/browser-compat";
+import { isRestrictedInAppBrowser, isAndroid, isIOS, openInSystemBrowser, downloadPhoto, copyCurrentUrl } from "@/lib/browser-compat";
 
 // Memoized PhotoCard to prevent unnecessary grid re-renders
 const PhotoCard = memo(function PhotoCard({
@@ -119,9 +119,16 @@ export function GuestGalleryPage({
   const [visibleCount, setVisibleCount] = useState(16);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
+  const [isAndroidDevice, setIsAndroidDevice] = useState(false);
+  const [isIOSDevice, setIsIOSDevice] = useState(false);
+  const [galleryLinkCopied, setGalleryLinkCopied] = useState(false);
 
   useEffect(() => {
-    setIsInAppBrowser(isRestrictedInAppBrowser());
+    if (isRestrictedInAppBrowser()) {
+      setIsInAppBrowser(true);
+      setIsAndroidDevice(isAndroid());
+      setIsIOSDevice(isIOS());
+    }
   }, []);
 
   // Reset visible count if photos array changes
@@ -223,18 +230,50 @@ export function GuestGalleryPage({
 
         {/* Facebook / Instagram in-app browser warning */}
         {isInAppBrowser && (
-          <div className="mb-5 rounded-2xl border border-amber-300 bg-amber-50 p-4 flex items-start gap-3">
-            <svg className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-amber-900">You&apos;re using the Facebook/Instagram browser</p>
-              <p className="text-xs text-amber-800 mt-0.5">Camera and downloads may not work. Open in Chrome or Safari for the full experience.</p>
+          <div className="mb-5 rounded-2xl border border-amber-300 bg-amber-50/95 backdrop-blur-md p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+            <div className="flex items-start gap-3 min-w-0">
+              <svg className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+              </svg>
+              <div>
+                <p className="text-sm font-bold text-amber-950">
+                  {isIOSDevice ? "Viewing inside Facebook / Messenger on iPhone" : "Viewing inside Facebook / Messenger"}
+                </p>
+                <p className="text-xs text-amber-800 mt-0.5">
+                  {isIOSDevice
+                    ? "Tap ••• at top-right → 'Open in Safari' to save all photos at once, or tap any photo to save directly."
+                    : "For 1-tap photo downloading, open this gallery in Google Chrome."}
+                </p>
+              </div>
             </div>
-            <button
-              onClick={() => openInSystemBrowser()}
-              className="shrink-0 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition-all active:scale-95"
-            >
-              Open in browser
-            </button>
+
+            <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+              {isIOSDevice && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const copied = await copyCurrentUrl();
+                    if (copied) {
+                      setGalleryLinkCopied(true);
+                      showToast("Gallery link copied! Open Safari and paste.");
+                      setTimeout(() => setGalleryLinkCopied(false), 3000);
+                    }
+                    openInSystemBrowser();
+                  }}
+                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition-all active:scale-95 shadow-sm"
+                >
+                  {galleryLinkCopied ? "✓ Link Copied" : "Copy Link"}
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => openInSystemBrowser()}
+                className="px-3.5 py-1.5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white text-xs font-bold rounded-xl transition-all active:scale-95 shadow-sm"
+              >
+                {isAndroidDevice ? "Open in Chrome" : "Open in Safari"}
+              </button>
+            </div>
           </div>
         )}
 
