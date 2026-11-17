@@ -280,7 +280,6 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
         // Start scanning immediately in timed mode — no waiting for MediaPipe
         setGuideMode("timed");
         setPhase("scan");
-        speak(captureSteps[0].instruction);
         animationFrame = requestAnimationFrame(timedScanFrame);
 
         // Load MediaPipe in background and upgrade to landmark mode when ready
