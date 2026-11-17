@@ -28,7 +28,7 @@ export function evaluateFacePose(faces: NormalizedLandmark[][], step: ScanStep):
   // The camera frame is unmirrored. A subject turning left moves the nose
   // toward increasing image x, even though the preview is mirrored in CSS.
   const yaw = (nose.x - centerX) / faceWidth;
-  if (step === "front" && Math.abs(yaw) > 0.075) return { aligned: false, guidance: "turn-front" };
+  if (step === "front" && Math.abs(yaw) > 0.15) return { aligned: false, guidance: "turn-front" };
   if (step === "left" && yaw < 0.11) return { aligned: false, guidance: "turn-left" };
   if (step === "right" && yaw > -0.11) return { aligned: false, guidance: "turn-right" };
   return { aligned: true, guidance: "hold-still" };
