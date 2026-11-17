@@ -257,62 +257,51 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
 
     const start = async () => {
       try {
-        // Speak instruction right away on page opening
         speak("Please align your face and look straight at the camera.");
 
         if (!navigator.mediaDevices?.getUserMedia) throw new Error("This browser cannot access a camera.");
-        const cameraRequest = navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 640 } },
-          audio: false,
-        });
-        cameraRequest.then((lateStream) => {
-          if (stopped) lateStream.getTracks().forEach((track) => track.stop());
-        }).catch(() => undefined);
         stream = await Promise.race([
-          cameraRequest,
+          navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 640 } },
+            audio: false,
+          }),
           new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Camera permission took too long. Allow access in your browser and retry.")), 15000)),
         ]);
         if (stopped) { stopCamera(); return; }
         const video = videoRef.current;
         if (!video) throw new Error("Camera preview is unavailable.");
         video.srcObject = stream;
-        setPhase("camera");
-        setStartupMessage("Camera is on. Loading face guide...");
         await Promise.race([
           video.play(),
           new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Camera preview did not start. Please retry.")), 6000)),
         ]);
-        const modelRequest = (async () => {
+        if (stopped) { stopCamera(); return; }
+
+        // Start scanning immediately in timed mode — no waiting for MediaPipe
+        setGuideMode("timed");
+        setPhase("scan");
+        speak(captureSteps[0].instruction);
+        animationFrame = requestAnimationFrame(timedScanFrame);
+
+        // Load MediaPipe in background and upgrade to landmark mode when ready
+        try {
           const vision = await FilesetResolver.forVisionTasks("/mediapipe/wasm");
-          return FaceLandmarker.createFromOptions(vision, {
+          const model = await FaceLandmarker.createFromOptions(vision, {
             baseOptions: { modelAssetPath: "/mediapipe/face_landmarker.task", delegate: "CPU" },
             runningMode: "VIDEO",
             numFaces: 2,
           });
-        })();
-        modelRequest.then((model) => {
-          if (modelTimedOut || stopped) model.close();
-        }).catch(() => undefined);
-        landmarker = await Promise.race([
-          modelRequest,
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Face guide timed out")), 18000)),
-        ]);
-        if (stopped) { stopCamera(); return; }
-        setPhase("scan");
-        speak(captureSteps[0].instruction);
-        animationFrame = requestAnimationFrame(scanFrame);
+          if (stopped || modelTimedOut) { model.close(); return; }
+          // Upgrade: cancel timed loop, switch to landmark-based scan
+          cancelAnimationFrame(animationFrame);
+          landmarker = model;
+          setGuideMode("landmarks");
+          animationFrame = requestAnimationFrame(scanFrame);
+        } catch {
+          // MediaPipe failed — stay in timed mode (already running)
+        }
       } catch (error) {
         if (stopped) return;
-        if (stream && videoRef.current?.readyState && videoRef.current.readyState >= 2) {
-          modelTimedOut = true;
-          landmarker?.close();
-          landmarker = null;
-          setGuideMode("timed");
-          setPhase("scan");
-          speak(`${captureSteps[0].instruction}. Hold each pose until it captures automatically.`);
-          animationFrame = requestAnimationFrame(timedScanFrame);
-          return;
-        }
         stopped = true;
         stopCamera();
         setErrorMessage(error instanceof Error ? error.message : "Camera access failed. Check permission and try again.");
