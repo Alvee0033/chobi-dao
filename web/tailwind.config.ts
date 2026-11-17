@@ -12,13 +12,22 @@ const config: Config = {
         xs: "420px",
       },
       fontFamily: {
-        sans: ['"DM Sans"', "sans-serif"],
-        heading: ['"Nunito"', "sans-serif"]
+        sans: ['"Plus Jakarta Sans"', '"DM Sans"', "sans-serif"],
+        heading: ['"Fraunces"', "Georgia", "serif"],
+        serif: ['"Fraunces"', '"Playfair Display"', "Georgia", "serif"]
       },
       colors: {
-        canvas: "#Fdfcfb",
-        charcoal: "#332F3A",
-        muted: "#716e77"
+        canvas: "#FAF6F0",
+        charcoal: "#2D1807",
+        muted: "#5C4D43",
+        brand: {
+          orange: "#E65A15",
+          "orange-dark": "#D14A0A",
+          brown: "#2D1807",
+          sand: "#FAF6F0",
+          cream: "#F4EDE2",
+          card: "#FBF8F3",
+        }
       },
       animation: {
         float: "float 8s ease-in-out infinite",

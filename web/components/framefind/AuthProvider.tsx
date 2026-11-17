@@ -37,8 +37,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       try {
         const saved = JSON.parse(raw) as DashboardAuthState;
+        // Seed saved auth immediately so dashboard renders smoothly
+        setAuth(saved);
         
-        // Try to verify token
+        // Try to verify token in background
         try {
           const profile = await me(saved.accessToken);
           const newState = {
@@ -69,12 +71,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setAuth(newState);
             localStorage.setItem("framefind.auth", JSON.stringify(newState));
           } catch (refreshErr) {
-            // Refresh failed, logout
-            localStorage.removeItem("framefind.auth");
-            setAuth(null);
+            // Only clear auth if server explicitly returned 401/403, keep session for offline/network retry
+            const isUnauthorized = refreshErr instanceof Error && (refreshErr.message.includes("401") || refreshErr.message.includes("Unauthorized"));
+            if (isUnauthorized) {
+              localStorage.removeItem("framefind.auth");
+              setAuth(null);
+            }
           }
         }
       } catch (e) {
+        // Only clear if JSON parsing invalid
         localStorage.removeItem("framefind.auth");
       } finally {
         setIsLoading(false);

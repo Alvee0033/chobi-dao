@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "video:studio": "remotion studio video/index.ts",
+    "video:render": "remotion render video/index.ts ChobiDaoLaunch video/out/chobi-dao-launch.mp4",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -16,11 +18,13 @@
     "react-dom": "18.2.0"
   },
   "devDependencies": {
+    "@remotion/cli": "^4.0.544",
     "@types/node": "20.14.10",
     "@types/react": "18.3.3",
     "@types/react-dom": "18.3.0",
     "autoprefixer": "10.4.19",
     "postcss": "8.4.39",
+    "remotion": "^4.0.544",
     "tailwindcss": "3.4.7",
     "typescript": "5.5.3"
   }
