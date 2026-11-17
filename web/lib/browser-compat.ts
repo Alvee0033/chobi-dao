@@ -35,30 +35,8 @@ export function getAndroidChromeIntent(url?: string): string {
 }
 
 /**
- * Automatically escape to Chrome if on Android in an in-app browser.
- * Uses sessionStorage guard to prevent redirect loops.
- */
-export function autoEscapeAndroid(url?: string): boolean {
-  if (typeof window === "undefined") return false;
-  if (isAndroid() && isRestrictedInAppBrowser()) {
-    try {
-      const redirectedKey = "chobi.iab_escaped";
-      if (sessionStorage.getItem(redirectedKey)) {
-        return false;
-      }
-      sessionStorage.setItem(redirectedKey, "1");
-      const intentUrl = getAndroidChromeIntent(url);
-      window.location.href = intentUrl;
-      return true;
-    } catch (e) {
-      console.warn("Auto-escape intent failed:", e);
-    }
-  }
-  return false;
-}
-
-/**
  * Open the current page in the system browser (Chrome/Safari).
+ * MUST ONLY be called upon explicit user click/gesture.
  */
 export function openInSystemBrowser(url?: string): void {
   if (typeof window === "undefined") return;
@@ -67,7 +45,7 @@ export function openInSystemBrowser(url?: string): void {
     const intentUrl = getAndroidChromeIntent(target);
     window.location.href = intentUrl;
   } else {
-    // For iOS / Desktop: navigate directly or open in Safari
+    // For iOS / Desktop: navigate directly or prompt in Safari
     window.location.href = target;
   }
 }

@@ -7,7 +7,7 @@ import { saveGuestSearchSession } from "../guest-session";
 import { Icons } from "../icons";
 import type { ShowToast } from "../types";
 import { ClayCard } from "../ui/ClayCard";
-import { isRestrictedInAppBrowser, isAndroid, isIOS, autoEscapeAndroid, openInSystemBrowser, copyCurrentUrl } from "@/lib/browser-compat";
+import { isRestrictedInAppBrowser, isAndroid, openInSystemBrowser, isIOS } from "@/lib/browser-compat";
 
 type Phase = "init" | "camera" | "scan" | "processing" | "success" | "error";
 const captureSteps: { key: ScanStep; label: string; instruction: string }[] = [
@@ -95,13 +95,6 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
   const [capturedImages, setCapturedImages] = useState<string[]>([]);
   const [guidance, setGuidance] = useState<FaceGuidance>("no-face");
   const [holdProgress, setHoldProgress] = useState(0);
-  const [linkCopied, setLinkCopied] = useState(false);
-
-  useEffect(() => {
-    if (isRestrictedInAppBrowser() && isAndroid()) {
-      autoEscapeAndroid();
-    }
-  }, []);
 
   const speak = useCallback((message: string) => {
     if (!voiceEnabledRef.current || typeof window === "undefined" || !("speechSynthesis" in window)) return;
@@ -154,10 +147,6 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
   }, [router, showToast, slug, speak]);
 
   useEffect(() => {
-    if (isRestrictedInAppBrowser()) {
-      return;
-    }
-
     if (!slug) {
       router.replace("/find");
       return;
@@ -315,7 +304,16 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
         if (stopped) return;
         stopped = true;
         stopCamera();
-        setErrorMessage(error instanceof Error ? error.message : "Camera access failed. Check permission and try again.");
+        const inApp = isRestrictedInAppBrowser();
+        if (inApp) {
+          setErrorMessage(
+            isIOS()
+              ? "Messenger restricts camera access on iPhone. Tap below to open in Safari."
+              : "Camera access was blocked by Messenger. Tap below to open in Google Chrome."
+          );
+        } else {
+          setErrorMessage(error instanceof Error ? error.message : "Camera access failed. Check permission and try again.");
+        }
         setPhase("error");
       }
     };
@@ -336,130 +334,6 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
   const radius = 132;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (holdProgress / 100) * circumference;
-
-  // If Facebook/Instagram in-app browser — camera is fully blocked, must redirect
-  if (typeof window !== "undefined" && isRestrictedInAppBrowser()) {
-    const android = isAndroid();
-    const ios = isIOS();
-
-    return (
-      <div className="min-h-[100dvh] w-full flex flex-col items-center justify-between p-4 sm:p-6 bg-gradient-to-b from-[#FFFDF9] via-[#FAF6F0] to-[#F5EEE6] text-center overflow-x-hidden">
-        {/* iOS Top Visual Guide pointing to the 3 dots menu at top-right */}
-        {ios && (
-          <div className="w-full max-w-md bg-amber-500 text-white rounded-2xl px-4 py-2.5 shadow-md flex items-center justify-between gap-3 text-xs font-bold animate-pulse mb-2">
-            <span className="flex items-center gap-1.5">
-              <span>👉</span>
-              <span>Tap <strong>•••</strong> in the top-right corner</span>
-            </span>
-            <span className="bg-white/20 px-2 py-0.5 rounded-lg text-[10px] uppercase tracking-wider whitespace-nowrap">
-              Open in Safari
-            </span>
-          </div>
-        )}
-
-        {/* Top Header Logo */}
-        <header className="w-full max-w-md flex items-center justify-between py-2 shrink-0">
-          <div className="flex items-center gap-2 text-orange-600 font-serif font-bold text-xl">
-            <img src="/logo-mark.webp" alt="Chobi Dao" className="w-8 h-8 object-contain" />
-            <span>Chobi dao</span>
-          </div>
-          <button
-            onClick={() => router.push(`/e/${encodeURIComponent(slug)}`)}
-            className="text-xs font-bold text-[#7A6B62] px-3 py-1.5 rounded-xl bg-white/80 border border-[#EADECF] shadow-sm active:scale-95 transition-all"
-          >
-            Cancel
-          </button>
-        </header>
-
-        {/* Card */}
-        <ClayCard className="w-full max-w-md my-auto flex flex-col items-center p-6 sm:p-8 bg-white/90 backdrop-blur-xl rounded-[32px] border border-white/90 shadow-clay-card">
-          <div className="w-16 h-16 rounded-3xl bg-orange-100 text-orange-600 flex items-center justify-center mb-4 shadow-sm">
-            {android ? (
-              <svg className="w-9 h-9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10" />
-                <circle cx="12" cy="12" r="4" />
-                <line x1="21.17" y1="8" x2="12" y2="8" />
-                <line x1="3.95" y1="6.06" x2="8.54" y2="14" />
-                <line x1="10.88" y1="21.94" x2="15.46" y2="14" />
-              </svg>
-            ) : (
-              <svg className="w-9 h-9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10" />
-                <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
-              </svg>
-            )}
-          </div>
-
-          <span className="text-[10px] font-bold uppercase tracking-wider text-orange-600 bg-orange-100/70 border border-orange-200/60 px-3 py-1 rounded-full mb-3">
-            {android ? "Android In-App Browser" : "iPhone In-App Browser"}
-          </span>
-
-          <h1 className="text-xl sm:text-2xl font-serif font-bold text-[#2D1807] mb-2 tracking-tight">
-            {android ? "Opening in Google Chrome..." : "Open in Safari to Scan"}
-          </h1>
-
-          <p className="text-xs sm:text-sm text-[#7A6B62] leading-relaxed mb-6 max-w-xs">
-            {android
-              ? "Facebook & Messenger block the camera. Opening Chrome automatically so your face scan can proceed."
-              : "Apple restricts camera access inside Facebook & Messenger. Open in Safari to verify your face and view your photos."}
-          </p>
-
-          <div className="w-full flex flex-col gap-3">
-            {android ? (
-              <button
-                type="button"
-                onClick={() => openInSystemBrowser()}
-                className="w-full h-12 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold text-sm rounded-2xl shadow-clay-btn transition-all active:scale-95 flex items-center justify-center gap-2"
-              >
-                <span>Open in Google Chrome</span>
-              </button>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const copied = await copyCurrentUrl();
-                    if (copied) {
-                      setLinkCopied(true);
-                      showToast("Link copied! Open Safari and paste.");
-                      setTimeout(() => setLinkCopied(false), 4000);
-                    }
-                    openInSystemBrowser();
-                  }}
-                  className="w-full h-12 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold text-sm rounded-2xl shadow-clay-btn transition-all active:scale-95 flex items-center justify-center gap-2"
-                >
-                  {linkCopied ? <span>✓ Link Copied!</span> : <span>Copy Link & Open Safari</span>}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => openInSystemBrowser()}
-                  className="w-full h-10 bg-white hover:bg-orange-50 text-[#2D1807] border border-[#EADECF] font-bold text-xs rounded-2xl shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1.5"
-                >
-                  <span>Open Directly</span>
-                </button>
-              </>
-            )}
-
-            <button
-              type="button"
-              onClick={() => router.back()}
-              className="text-xs font-bold text-[#7A6B62] hover:text-[#2D1807] py-2 transition-colors"
-            >
-              Go back
-            </button>
-          </div>
-        </ClayCard>
-
-        {/* Footer info */}
-        <footer className="w-full max-w-md py-2 text-center text-[11px] text-[#7A6B62]">
-          {android
-            ? "Tip: Chrome provides 100% full camera & download support."
-            : "Tip: In Facebook, tap ••• at top-right and select Open in Safari."}
-        </footer>
-      </div>
-    );
-  }
 
   return (
     <div className="h-[100dvh] max-h-[100dvh] w-full flex flex-col items-center justify-between p-4 sm:p-6 bg-gradient-to-b from-[#FFFDF9] via-[#FAF6F0] to-[#F5EEE6] selection:bg-orange-200 overflow-hidden">
@@ -672,7 +546,7 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
               {scanning
                 ? (guideMode === "timed" ? "Hold pose... Auto-capturing" : guidanceText[guidance])
                 : phase === "error"
-                ? "Camera blocked — Click 'Retry camera scan' to allow"
+                ? (errorMessage || "Camera blocked — Click 'Retry camera scan' to allow")
                 : phase === "camera"
                 ? "Starting camera..."
                 : "Look straight into the circle"}
@@ -683,9 +557,22 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
         {/* Action Controls: Retry on error */}
         {phase === "error" && (
           <div className="w-full flex flex-col items-center gap-2 mt-1">
+            {isRestrictedInAppBrowser() && (
+              <button
+                type="button"
+                onClick={() => openInSystemBrowser()}
+                className="w-full h-11 sm:h-12 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold text-sm rounded-2xl shadow-clay-btn transition-all duration-200 active:scale-95 flex items-center justify-center gap-2"
+              >
+                Open in {isAndroid() ? "Google Chrome" : "Safari"}
+              </button>
+            )}
             <button
               onClick={() => window.location.reload()}
-              className="w-full h-11 sm:h-12 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold text-sm rounded-2xl shadow-clay-btn transition-all duration-200 hover:scale-[1.02] active:scale-95"
+              className={`w-full h-11 sm:h-12 text-sm font-bold rounded-2xl transition-all duration-200 active:scale-95 ${
+                isRestrictedInAppBrowser()
+                  ? "bg-white/80 hover:bg-white text-[#2D1807] border border-[#EADECF]"
+                  : "bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-clay-btn"
+              }`}
             >
               Retry camera scan
             </button>
