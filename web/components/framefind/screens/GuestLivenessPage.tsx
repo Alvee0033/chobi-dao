@@ -7,6 +7,7 @@ import { saveGuestSearchSession } from "../guest-session";
 import { Icons } from "../icons";
 import type { ShowToast } from "../types";
 import { ClayCard } from "../ui/ClayCard";
+import { isRestrictedInAppBrowser, openInSystemBrowser } from "@/lib/browser-compat";
 
 type Phase = "init" | "camera" | "scan" | "processing" | "success" | "error";
 const captureSteps: { key: ScanStep; label: string; instruction: string }[] = [
@@ -324,6 +325,35 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
   const radius = 132;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (holdProgress / 100) * circumference;
+
+  // If Facebook/Instagram in-app browser — camera is fully blocked, must redirect
+  if (typeof window !== "undefined" && isRestrictedInAppBrowser()) {
+    return (
+      <div className="h-[100dvh] w-full flex flex-col items-center justify-center gap-6 p-8 bg-gradient-to-b from-[#FFFDF9] to-[#F5EEE6] text-center">
+        <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center">
+          <svg className="w-8 h-8 text-amber-600" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" /></svg>
+        </div>
+        <div>
+          <h2 className="text-xl font-bold text-[#2D1807] mb-2">Camera not available here</h2>
+          <p className="text-sm text-[#7A6B62] max-w-xs mx-auto">
+            The Facebook and Instagram browsers block camera access. Open this page in <strong>Chrome</strong> or <strong>Safari</strong> to scan your face.
+          </p>
+        </div>
+        <button
+          onClick={() => openInSystemBrowser()}
+          className="px-6 py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-bold rounded-2xl shadow-lg active:scale-95 transition-all"
+        >
+          Open in Chrome / Safari
+        </button>
+        <button
+          onClick={() => router.back()}
+          className="text-sm text-[#7A6B62] underline underline-offset-2"
+        >
+          Go back
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="h-[100dvh] max-h-[100dvh] w-full flex flex-col items-center justify-between p-4 sm:p-6 bg-gradient-to-b from-[#FFFDF9] via-[#FAF6F0] to-[#F5EEE6] selection:bg-orange-200 overflow-hidden">
