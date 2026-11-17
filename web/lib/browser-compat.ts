@@ -1,6 +1,5 @@
 /**
- * Detects Facebook, Instagram, and other restricted in-app browsers (IAB)
- * that block getUserMedia, blob downloads, etc.
+ * Detects Facebook, Instagram, Messenger, and other restricted in-app browsers (IAB)
  */
 export function isRestrictedInAppBrowser(): boolean {
   if (typeof navigator === "undefined") return false;
@@ -35,19 +34,37 @@ export function getAndroidChromeIntent(url?: string): string {
 }
 
 /**
- * Open the current page in the system browser (Chrome/Safari).
- * MUST ONLY be called upon explicit user click/gesture.
+ * Open the page directly in Google Chrome on both Android and iOS upon user click.
  */
-export function openInSystemBrowser(url?: string): void {
+export function openInChrome(url?: string): void {
   if (typeof window === "undefined") return;
   const target = url || window.location.href;
+  const cleanUrl = target.replace(/^https?:\/\//, "");
+
   if (isAndroid()) {
+    // Android: Google Chrome Intent
     const intentUrl = getAndroidChromeIntent(target);
     window.location.href = intentUrl;
+  } else if (isIOS()) {
+    // iOS: Google Chrome App URL Scheme
+    const isHttps = target.startsWith("https");
+    const chromeScheme = `${isHttps ? "googlechromes" : "googlechrome"}://${cleanUrl}`;
+    window.location.href = chromeScheme;
+
+    // Fallback if Chrome is not installed on iOS
+    setTimeout(() => {
+      window.location.href = target;
+    }, 1200);
   } else {
-    // For iOS / Desktop: navigate directly or prompt in Safari
     window.location.href = target;
   }
+}
+
+/**
+ * Open the current page in the system browser.
+ */
+export function openInSystemBrowser(url?: string): void {
+  openInChrome(url);
 }
 
 /**

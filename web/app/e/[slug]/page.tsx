@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { BackgroundBlobs } from "@/components/framefind/ui/BackgroundBlobs";
 import { Icons } from "@/components/framefind/icons";
 import { ClayCard } from "@/components/framefind/ui/ClayCard";
+import { EventActionButton } from "@/components/framefind/EventActionButton";
 
 import { getApiBaseUrl } from "@/lib/api";
 
@@ -94,15 +95,7 @@ export default async function EventLandingPage({ params }: { params: { slug: str
           </p>
 
           <div className="w-full flex flex-col gap-4">
-            <Link href={event.searchEnabled ? `/e/${encodeURIComponent(event.slug)}/scan` : "#"} className="w-full">
-              <button 
-                className="w-full h-14 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-2xl font-black text-sm transition-all shadow-lg shadow-orange-500/20 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2"
-                disabled={!event.searchEnabled}
-              >
-                <Icons.FaceId size={18} />
-                Find my photos
-              </button>
-            </Link>
+            <EventActionButton slug={event.slug} searchEnabled={event.searchEnabled} />
             <Link href="/find" className="text-xs font-black text-muted/65 hover:text-charcoal transition-colors">
               Enter a different event slug
             </Link>

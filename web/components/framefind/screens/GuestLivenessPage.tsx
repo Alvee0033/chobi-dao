@@ -7,7 +7,7 @@ import { saveGuestSearchSession } from "../guest-session";
 import { Icons } from "../icons";
 import type { ShowToast } from "../types";
 import { ClayCard } from "../ui/ClayCard";
-import { isRestrictedInAppBrowser, isAndroid, openInSystemBrowser, isIOS } from "@/lib/browser-compat";
+import { isRestrictedInAppBrowser, isIOS, isAndroid, openInChrome, copyCurrentUrl } from "@/lib/browser-compat";
 
 type Phase = "init" | "camera" | "scan" | "processing" | "success" | "error";
 const captureSteps: { key: ScanStep; label: string; instruction: string }[] = [
@@ -147,6 +147,10 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
   }, [router, showToast, slug, speak]);
 
   useEffect(() => {
+    if (isRestrictedInAppBrowser()) {
+      return;
+    }
+
     if (!slug) {
       router.replace("/find");
       return;
@@ -334,6 +338,85 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
   const radius = 132;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (holdProgress / 100) * circumference;
+
+  if (typeof window !== "undefined" && isRestrictedInAppBrowser()) {
+    return (
+      <div className="h-[100dvh] max-h-[100dvh] w-full flex flex-col items-center justify-between p-4 sm:p-6 bg-gradient-to-b from-[#FFFDF9] via-[#FAF6F0] to-[#F5EEE6] selection:bg-orange-200 overflow-hidden">
+        {/* Top Navigation Bar */}
+        <header className="w-full max-w-md sm:max-w-xl flex items-center justify-between py-1 z-20 shrink-0">
+          <button
+            onClick={() => router.push("/")}
+            className="flex items-center gap-2 text-orange-600 font-serif font-bold text-xl sm:text-2xl hover:opacity-90 transition-opacity"
+          >
+            <img src="/logo-mark.webp" alt="Chobi Dao" className="w-7 h-7 sm:w-8 sm:h-8 object-contain" />
+            <span>Chobi dao</span>
+          </button>
+          <button
+            onClick={() => router.push(`/e/${encodeURIComponent(slug)}`)}
+            className="text-xs font-bold text-[#7A6B62] hover:text-[#2D1807] px-3.5 py-1.5 rounded-xl bg-white/80 border border-[#EADECF] shadow-sm hover:bg-white transition-colors"
+          >
+            Cancel
+          </button>
+        </header>
+
+        {/* Clean Center Card */}
+        <ClayCard className="w-full max-w-md text-center flex flex-col items-center p-6 sm:p-8 bg-white/90 backdrop-blur-xl rounded-[32px] border border-white/90 shadow-clay-card my-auto">
+          <div className="w-16 h-16 rounded-3xl bg-orange-100 text-orange-600 flex items-center justify-center mb-4 shadow-sm">
+            <svg className="w-9 h-9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <circle cx="12" cy="12" r="4" />
+              <line x1="21.17" y1="8" x2="12" y2="8" />
+              <line x1="3.95" y1="6.06" x2="8.54" y2="14" />
+              <line x1="10.88" y1="21.94" x2="15.46" y2="14" />
+            </svg>
+          </div>
+
+          <h1 className="text-xl sm:text-2xl font-serif font-bold text-[#2D1807] mb-2 tracking-tight">
+            Open in Chrome
+          </h1>
+
+          <p className="text-xs sm:text-sm text-[#7A6B62] leading-relaxed mb-6 max-w-xs">
+            Face verification requires camera access. Open this page in Google Chrome to scan your face.
+          </p>
+
+          <div className="w-full flex flex-col gap-3">
+            <button
+              type="button"
+              onClick={() => openInChrome()}
+              className="w-full h-12 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold text-sm rounded-2xl shadow-clay-btn transition-all active:scale-95 flex items-center justify-center gap-2"
+            >
+              <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <circle cx="12" cy="12" r="4" />
+                <line x1="21.17" y1="8" x2="12" y2="8" />
+                <line x1="3.95" y1="6.06" x2="8.54" y2="14" />
+                <line x1="10.88" y1="21.94" x2="15.46" y2="14" />
+              </svg>
+              <span>Open in Chrome</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={async () => {
+                const ok = await copyCurrentUrl();
+                if (ok) {
+                  showToast("Link copied! Open Chrome and paste.");
+                }
+              }}
+              className="text-xs font-bold text-[#7A6B62] hover:text-[#2D1807] py-2 transition-colors"
+            >
+              Copy link to paste in Chrome
+            </button>
+          </div>
+        </ClayCard>
+
+        {/* Footer */}
+        <footer className="w-full max-w-md py-1 text-center text-[11px] text-[#7A6B62]">
+          Photos are matched privately on your device.
+        </footer>
+      </div>
+    );
+  }
 
   return (
     <div className="h-[100dvh] max-h-[100dvh] w-full flex flex-col items-center justify-between p-4 sm:p-6 bg-gradient-to-b from-[#FFFDF9] via-[#FAF6F0] to-[#F5EEE6] selection:bg-orange-200 overflow-hidden">
@@ -560,10 +643,10 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
             {isRestrictedInAppBrowser() && (
               <button
                 type="button"
-                onClick={() => openInSystemBrowser()}
+                onClick={() => openInChrome()}
                 className="w-full h-11 sm:h-12 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold text-sm rounded-2xl shadow-clay-btn transition-all duration-200 active:scale-95 flex items-center justify-center gap-2"
               >
-                Open in {isAndroid() ? "Google Chrome" : "Safari"}
+                Open in Chrome
               </button>
             )}
             <button
