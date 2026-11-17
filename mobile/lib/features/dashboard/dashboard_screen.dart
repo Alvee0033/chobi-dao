@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:image_picker/image_picker.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/event_provider.dart';
+import '../analytics/analytics_screen.dart';
 import '../events/create_event_dialog.dart';
 import '../events/event_detail_screen.dart';
 import '../events/event_list_screen.dart';
+import '../photos/photo_upload_screen.dart';
 import '../scanner/qr_scanner_screen.dart';
+import '../settings/settings_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -18,8 +20,7 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  final ImagePicker _picker = ImagePicker();
-
+  
   @override
   void initState() {
     super.initState();
@@ -44,27 +45,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return;
     }
 
-    // Pick photos
-    final images = await _picker.pickMultiImage(imageQuality: 85);
-    if (images.isEmpty) return;
-
-    if (!mounted) return;
     final latestEvent = events.first;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Uploading ${images.length} photos to "${latestEvent.name}"...',
-        ),
-        backgroundColor: AppColors.charcoal,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-
-    // Navigate to event details to monitor indexing
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => EventDetailScreen(event: latestEvent),
+        builder: (_) => PhotoUploadScreen(event: latestEvent),
       ),
     );
   }
@@ -170,13 +155,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       ],
                     ),
-                    IconButton(
-                      icon: const Icon(
-                        Icons.logout_rounded,
-                        color: AppColors.textSecondary,
-                      ),
-                      tooltip: 'Sign Out',
-                      onPressed: _confirmLogout,
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(
+                            Icons.bar_chart_rounded,
+                            color: AppColors.charcoal,
+                          ),
+                          tooltip: 'Analytics',
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const AnalyticsScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.settings_outlined,
+                            color: AppColors.charcoal,
+                          ),
+                          tooltip: 'Settings',
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const SettingsScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.logout_rounded,
+                            color: AppColors.textSecondary,
+                          ),
+                          tooltip: 'Sign Out',
+                          onPressed: _confirmLogout,
+                        ),
+                      ],
                     ),
                   ],
                 ),

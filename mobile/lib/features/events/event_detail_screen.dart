@@ -1,12 +1,13 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
-import 'package:qr_flutter/qr_flutter.dart';
-import 'package:image_picker/image_picker.dart';
-import '../../core/theme/app_theme.dart';
-import '../../models/event.dart';
-import '../../providers/event_provider.dart';
+import "package:flutter/material.dart";
+import "package:flutter/services.dart";
+import "package:intl/intl.dart";
+import "package:provider/provider.dart";
+import "package:qr_flutter/qr_flutter.dart";
+import "package:share_plus/share_plus.dart";
+import "../../core/theme/app_theme.dart";
+import "../../models/event.dart";
+import "../../providers/event_provider.dart";
+import "../photos/photo_upload_screen.dart";
 
 class EventDetailScreen extends StatefulWidget {
   final Event event;
@@ -19,8 +20,6 @@ class EventDetailScreen extends StatefulWidget {
 
 class _EventDetailScreenState extends State<EventDetailScreen> {
   late Event _currentEvent;
-  final ImagePicker _picker = ImagePicker();
-  bool _isUploading = false;
 
   @override
   void initState() {
@@ -32,7 +31,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   }
 
   String get _guestUrl =>
-      'https://api-chobi.203.96.190.78.sslip.io/e/${_currentEvent.slug}';
+      "https://api-chobi.203.96.190.78.sslip.io/e/${_currentEvent.slug}";
 
   void _copyGuestUrl() {
     Clipboard.setData(ClipboardData(text: _guestUrl));
@@ -42,7 +41,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
           children: [
             Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
             SizedBox(width: 8),
-            Text('Guest link copied to clipboard!'),
+            Text("Guest link copied to clipboard!"),
           ],
         ),
         backgroundColor: AppColors.charcoal,
@@ -52,86 +51,54 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     );
   }
 
+  void _shareGuestUrl() {
+    SharePlus.instance.share(ShareParams(text: "Find your photos from ${_currentEvent.name}: $_guestUrl"));
+  }
+
   Future<void> _pickAndUploadPhotos() async {
-    try {
-      final List<XFile> images = await _picker.pickMultiImage(
-        imageQuality: 85,
-      );
+    final provider = context.read<EventProvider>();
+    final uploaded = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PhotoUploadScreen(event: _currentEvent),
+      ),
+    );
 
-      if (images.isEmpty) return;
-
-      setState(() => _isUploading = true);
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Selected ${images.length} photos for processing.'),
-          backgroundColor: AppColors.brandOrange,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-
-      // Simulate upload completion & trigger index status refresh
-      await Future.delayed(const Duration(seconds: 2));
-      if (!mounted) return;
-
-      await context.read<EventProvider>().fetchIndexStatus(_currentEvent.id);
-
-      setState(() {
-        _isUploading = false;
-        _currentEvent = _currentEvent.copyWith(
-          totalPhotos: _currentEvent.totalPhotos + images.length,
-        );
-      });
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Photos uploaded! Face indexing in progress.'),
-          backgroundColor: AppColors.success,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    } catch (e) {
-      setState(() => _isUploading = false);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Upload failed: $e'),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+    if (uploaded == true && mounted) {
+      await provider.fetchIndexStatus(_currentEvent.id);
+      await provider.fetchEvents();
     }
   }
 
   Future<void> _confirmDelete() async {
+    final navigator = Navigator.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Event?'),
+        title: const Text("Delete Event?"),
         content: Text(
-          'Are you sure you want to delete "${_currentEvent.name}"? This action cannot be undone.',
+          "Are you sure you want to delete ${_currentEvent.name}? This action cannot be undone.",
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: const Text("Cancel"),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
+            child: const Text("Delete"),
           ),
         ],
       ),
     );
 
-    if (confirmed == true && mounted) {
+    if (confirmed == true) {
+      if (!mounted) return;
       final provider = context.read<EventProvider>();
       final ok = await provider.deleteEvent(_currentEvent.id);
-      if (ok && mounted) {
-        Navigator.pop(context);
+      if (ok) {
+        navigator.pop();
       }
     }
   }
@@ -142,8 +109,8 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     final indexStatus = eventProvider.indexStatus;
 
     final formattedDate = _currentEvent.date != null
-        ? DateFormat('MMMM d, yyyy').format(_currentEvent.date!)
-        : 'Date not set';
+        ? DateFormat("MMMM d, yyyy").format(_currentEvent.date!)
+        : "Date not set";
 
     return Scaffold(
       backgroundColor: AppColors.creamCanvas,
@@ -153,86 +120,90 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
-          onPressed: () => Navigator.pop(context),
-        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.share_rounded),
-            tooltip: 'Copy Guest Link',
-            onPressed: _copyGuestUrl,
+            tooltip: "Share Guest Link",
+            onPressed: _shareGuestUrl,
           ),
           IconButton(
             icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error),
-            tooltip: 'Delete Event',
+            tooltip: "Delete Event",
             onPressed: _confirmDelete,
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: () => eventProvider.fetchIndexStatus(_currentEvent.id),
-        color: AppColors.brandOrange,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Event Hero / QR Code Card
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: AppShadows.card,
-                ),
-                padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
-                child: Column(
-                  children: [
-                    // Badge: Scan to find photos
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.brandOrangeSubtle,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // QR Code Standee Card
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: AppColors.white,
+                borderRadius: BorderRadius.circular(28),
+                boxShadow: AppShadows.card,
+                border: Border.all(color: AppColors.borderLight),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(
-                            Icons.qr_code_scanner_rounded,
-                            size: 16,
-                            color: AppColors.brandOrange,
-                          ),
-                          SizedBox(width: 6),
-                          Text(
-                            'Guest Self-Service QR',
+                          const Text(
+                            "Guest QR Standee",
                             style: TextStyle(
-                              color: AppColors.brandOrange,
-                              fontWeight: FontWeight.w700,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.charcoal,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            "Guests scan to instantly find photos",
+                            style: TextStyle(
                               fontSize: 12,
+                              color: AppColors.textSecondary,
                             ),
                           ),
                         ],
                       ),
-                    ),
-                    const SizedBox(height: 20),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.brandOrangeSubtle,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Text(
+                          "Active",
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.brandOrange,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
 
-                    // QR Code Display
-                    Container(
+                  Center(
+                    child: Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: AppColors.borderLight, width: 1.5),
-                        boxShadow: const [
+                        border: Border.all(color: AppColors.border),
+                        boxShadow: [
                           BoxShadow(
-                            color: Color(0x082D1807),
-                            blurRadius: 12,
-                            offset: Offset(0, 4),
+                            color: Colors.black.withValues(alpha: 0.04),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
                           ),
                         ],
                       ),
@@ -242,277 +213,198 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                         size: 200.0,
                         eyeStyle: const QrEyeStyle(
                           eyeShape: QrEyeShape.square,
-                          color: AppColors.brandOrange,
+                          color: AppColors.charcoal,
                         ),
                         dataModuleStyle: const QrDataModuleStyle(
-                          dataModuleShape: QrDataModuleShape.circle,
+                          dataModuleShape: QrDataModuleShape.square,
                           color: AppColors.charcoal,
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Event Slug / Link Bar
-                    InkWell(
-                      onTap: _copyGuestUrl,
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.creamCanvas,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.border),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.link_rounded,
-                              size: 18,
-                              color: AppColors.textSecondary,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                _guestUrl,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.charcoal,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const Icon(
-                              Icons.copy_rounded,
-                              size: 16,
-                              color: AppColors.brandOrange,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // Real-Time Indexing Progress Card
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: AppShadows.card,
-                ),
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 10,
-                              height: 10,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: indexStatus.isIndexing
-                                    ? AppColors.warning
-                                    : AppColors.success,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Face Indexing Engine',
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                          ],
-                        ),
-                        IconButton(
-                          icon: eventProvider.isIndexingLoading
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Icon(
-                                  Icons.refresh_rounded,
-                                  size: 20,
-                                  color: AppColors.brandOrange,
-                                ),
-                          onPressed: () => eventProvider.fetchIndexStatus(_currentEvent.id),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Progress Bar
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: LinearProgressIndicator(
-                        value: indexStatus.totalPhotos > 0
-                            ? indexStatus.progressRatio
-                            : (_currentEvent.totalPhotos > 0 ? 1.0 : 0.0),
-                        minHeight: 10,
-                        backgroundColor: AppColors.borderLight,
-                        valueColor: const AlwaysStoppedAnimation<Color>(
-                          AppColors.brandOrange,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Progress Counters Row
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _buildStatPill(
-                          label: 'Total',
-                          value: '${indexStatus.totalPhotos > 0 ? indexStatus.totalPhotos : _currentEvent.totalPhotos}',
-                          color: AppColors.charcoal,
-                        ),
-                        _buildStatPill(
-                          label: 'Indexed',
-                          value: '${indexStatus.indexedPhotos > 0 ? indexStatus.indexedPhotos : _currentEvent.indexedPhotos}',
-                          color: AppColors.success,
-                        ),
-                        _buildStatPill(
-                          label: 'In Queue',
-                          value: '${indexStatus.matchedPhotos}',
-                          color: AppColors.warning,
-                        ),
-                        _buildStatPill(
-                          label: 'Failed',
-                          value: '${indexStatus.failedPhotos}',
-                          color: AppColors.error,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // Event Information Card
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: AppShadows.card,
-                ),
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Event Information',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 16),
-                    _buildInfoRow(
-                      icon: Icons.calendar_today_rounded,
-                      title: 'Date',
-                      value: formattedDate,
-                    ),
-                    if (_currentEvent.location != null &&
-                        _currentEvent.location!.isNotEmpty) ...[
-                      const Divider(height: 24),
-                      _buildInfoRow(
-                        icon: Icons.location_on_rounded,
-                        title: 'Location',
-                        value: _currentEvent.location!,
-                      ),
-                    ],
-                    if (_currentEvent.pin != null &&
-                        _currentEvent.pin!.isNotEmpty) ...[
-                      const Divider(height: 24),
-                      _buildInfoRow(
-                        icon: Icons.lock_outline_rounded,
-                        title: 'Access PIN',
-                        value: _currentEvent.pin!,
-                      ),
-                    ],
-                    if (_currentEvent.details != null &&
-                        _currentEvent.details!.isNotEmpty) ...[
-                      const Divider(height: 24),
-                      _buildInfoRow(
-                        icon: Icons.notes_rounded,
-                        title: 'Notes',
-                        value: _currentEvent.details!,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 28),
-
-              // Upload Action Button
-              SizedBox(
-                height: 54,
-                child: ElevatedButton.icon(
-                  onPressed: _isUploading ? null : _pickAndUploadPhotos,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.brandOrange,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
                     ),
                   ),
-                  icon: _isUploading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.cloud_upload_rounded),
-                  label: Text(
-                    _isUploading
-                        ? 'Uploading & Indexing...'
-                        : 'Upload Event Photos',
+
+                  const SizedBox(height: 16),
+                  Text(
+                    _guestUrl,
                     style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 16),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _copyGuestUrl,
+                          icon: const Icon(Icons.copy_rounded, size: 16),
+                          label: const Text("Copy Link"),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _shareGuestUrl,
+                          icon: const Icon(Icons.share_rounded, size: 16),
+                          label: const Text("Share QR"),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // AI Indexing Status Card
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppColors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: AppShadows.card,
+                border: Border.all(color: AppColors.borderLight),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        "AI Face Indexing Status",
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.charcoal,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.refresh_rounded, size: 20),
+                        tooltip: "Refresh indexing",
+                        onPressed: () => context
+                            .read<EventProvider>()
+                            .fetchIndexStatus(_currentEvent.id),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: LinearProgressIndicator(
+                      value: indexStatus.progressRatio,
+                      minHeight: 8,
+                      backgroundColor: AppColors.borderLight,
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        AppColors.brandOrange,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildStatPill("Total", "${indexStatus.totalPhotos}"),
+                      _buildStatPill("Indexed", "${indexStatus.indexedPhotos}"),
+                      _buildStatPill("Matched", "${indexStatus.matchedPhotos}"),
+                      _buildStatPill("Status", indexStatus.status.toUpperCase()),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // Event Details / Meta
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppColors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: AppShadows.card,
+                border: Border.all(color: AppColors.borderLight),
+              ),
+              child: Column(
+                children: [
+                  _buildInfoRow(
+                    icon: Icons.calendar_today_rounded,
+                    label: "Event Date",
+                    value: formattedDate,
+                  ),
+                  if (_currentEvent.location != null) ...[
+                    const Divider(height: 24),
+                    _buildInfoRow(
+                      icon: Icons.place_outlined,
+                      label: "Venue / City",
+                      value: _currentEvent.location!,
+                    ),
+                  ],
+                  const Divider(height: 24),
+                  _buildInfoRow(
+                    icon: Icons.photo_camera_back_rounded,
+                    label: "Uploaded Photos",
+                    value: "${_currentEvent.totalPhotos} photos",
+                  ),
+                  if (_currentEvent.pin != null && _currentEvent.pin!.isNotEmpty) ...[
+                    const Divider(height: 24),
+                    _buildInfoRow(
+                      icon: Icons.lock_outline_rounded,
+                      label: "Access PIN",
+                      value: _currentEvent.pin!,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // Upload Button
+            SizedBox(
+              height: 54,
+              child: ElevatedButton.icon(
+                onPressed: _pickAndUploadPhotos,
+                icon: const Icon(Icons.cloud_upload_rounded),
+                label: const Text(
+                  "Upload & Index Photos",
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
-            ],
-          ),
+            ),
+            const SizedBox(height: 24),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildStatPill({
-    required String label,
-    required String value,
-    required Color color,
-  }) {
+  Widget _buildStatPill(String title, String val) {
     return Column(
       children: [
         Text(
-          value,
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            color: color,
+          val,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: AppColors.charcoal,
           ),
         ),
         const SizedBox(height: 2),
         Text(
-          label,
+          title,
           style: const TextStyle(
             fontSize: 11,
             color: AppColors.textSecondary,
-            fontWeight: FontWeight.w500,
           ),
         ),
       ],
@@ -521,36 +413,27 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
 
   Widget _buildInfoRow({
     required IconData icon,
-    required String title,
+    required String label,
     required String value,
   }) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 20, color: AppColors.brandOrange),
+        Icon(icon, size: 20, color: AppColors.textSecondary),
         const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textSecondary,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.charcoal,
-                ),
-              ),
-            ],
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 13,
+            color: AppColors.textSecondary,
+          ),
+        ),
+        const Spacer(),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+            color: AppColors.charcoal,
           ),
         ),
       ],
