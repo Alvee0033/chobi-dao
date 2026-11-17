@@ -7,7 +7,7 @@ const nextConfig = {
       source: "/:asset(logo-mark.webp|favicon-64.png|apple-touch-icon.png)",
       headers: [{ key: "Cache-Control", value: "public, max-age=604800, stale-while-revalidate=86400" }]
     }, {
-      source: "/images/landing/event-memory.webp",
+      source: "/images/landing/:asset(event-memory.webp|event-hero.webp|step-scan.webp|step-selfie.webp|step-find.webp)",
       headers: [{ key: "Cache-Control", value: "public, max-age=604800, stale-while-revalidate=86400" }]
     }];
   },
