@@ -1,14 +1,16 @@
 import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:provider/provider.dart";
+import "core/config/app_config.dart";
 import "core/theme/app_theme.dart";
 import "providers/auth_provider.dart";
 import "providers/event_provider.dart";
 import "features/auth/login_screen.dart";
-import "features/dashboard/dashboard_screen.dart";
+import "features/shell/main_shell_screen.dart";
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await AppConfig.initialize();
   
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -107,7 +109,7 @@ class AppRootGate extends StatelessWidget {
     }
 
     if (auth.isAuthenticated) {
-      return const DashboardScreen();
+      return const MainShellScreen();
     }
 
     return const LoginScreen();

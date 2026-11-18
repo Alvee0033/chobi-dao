@@ -293,7 +293,7 @@ export function LandingPage() {
                 size="default"
                 className="shadow-clay-btn gap-2 text-xs sm:text-sm font-bold"
               >
-                <Icons.Image size={16} className="shrink-0" strokeWidth={2.2} />
+                <Icons.FaceId size={16} className="shrink-0" strokeWidth={2.2} />
                 <span className="hidden sm:inline">Find my photos</span>
                 <span className="sm:hidden">Find photos</span>
               </Button>
@@ -306,153 +306,245 @@ export function LandingPage() {
         {/* ========================================================================= */}
         {/* 2. FULL DESKTOP HERO WITH SMOOTH ENTRANCE MICRO-INTERACTIONS              */}
         {/* ========================================================================= */}
-        <section className="relative min-h-[calc(100dvh-4rem)] sm:min-h-[calc(100dvh-5rem)] flex items-center justify-center overflow-hidden py-10 lg:py-0">
-          {/* Ambient Lighting Orbs */}
-          <div className="absolute top-1/4 left-1/4 w-[28rem] h-[28rem] bg-amber-200/30 rounded-full blur-[110px] pointer-events-none -z-10" />
-          <div className="absolute bottom-1/4 right-1/4 w-[30rem] h-[30rem] bg-orange-200/25 rounded-full blur-[110px] pointer-events-none -z-10" />
+        <section className="relative min-h-[calc(100dvh-4.5rem)] sm:min-h-[calc(100dvh-5rem)] flex items-center justify-center overflow-hidden py-12 sm:py-16 lg:py-20 xl:py-24">
+          {/* Dynamic Ambient Background Mesh & Radiant Glow Orbs */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
+            {/* Primary Warm Radiant Sunspot */}
+            <motion.div
+              animate={{
+                scale: [1, 1.15, 1],
+                x: [0, 30, 0],
+                y: [0, -25, 0],
+              }}
+              transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
+              className="absolute top-[-8%] left-[12%] w-[36rem] sm:w-[48rem] h-[36rem] sm:h-[48rem] rounded-full bg-gradient-to-br from-[#FF9843]/25 via-[#E65A15]/15 to-transparent blur-[120px]"
+            />
+            {/* Secondary Golden Flare */}
+            <motion.div
+              animate={{
+                scale: [1.12, 1, 1.12],
+                x: [0, -35, 0],
+                y: [0, 25, 0],
+              }}
+              transition={{ duration: 14, repeat: Infinity, ease: "easeInOut", delay: 2 }}
+              className="absolute bottom-[-10%] right-[8%] w-[40rem] sm:w-[52rem] h-[40rem] sm:h-[52rem] rounded-full bg-gradient-to-tl from-[#FDBA74]/30 via-[#F59E0B]/18 to-transparent blur-[130px]"
+            />
+            {/* Central Focal Spotlight behind hero showcase */}
+            <div className="absolute top-1/2 right-[12%] -translate-y-1/2 w-[32rem] sm:w-[44rem] h-[32rem] sm:h-[44rem] bg-[radial-gradient(circle,rgba(230,90,21,0.22)_0%,rgba(245,158,11,0.12)_45%,transparent_75%)] blur-[90px]" />
+            {/* Subtle dot matrix grid overlay for tactile depth */}
+            <div className="absolute inset-0 bg-[radial-gradient(#2D1807_1px,transparent_1px)] [background-size:28px_28px] opacity-[0.035]" />
+          </div>
 
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
-            <div className="flex flex-col lg:grid lg:grid-cols-12 gap-10 lg:gap-12 items-center">
+          <div className="max-w-7xl xl:max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 w-full">
+            <div className="flex flex-col lg:grid lg:grid-cols-12 gap-12 lg:gap-14 xl:gap-16 items-center">
               
               {/* Image Column: Appears FIRST on mobile, Right on Desktop */}
               <motion.div
-                initial={{ opacity: 0, scale: 0.96, y: 15 }}
+                initial={{ opacity: 0, scale: 0.94, y: 25 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
-                className="w-full lg:col-span-6 order-1 lg:order-2 flex justify-center items-center relative"
+                transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
+                className="w-full lg:col-span-6 xl:col-span-6 order-1 lg:order-2 flex justify-center items-center relative"
               >
-                <div className="relative w-full max-w-[390px] sm:max-w-[480px] lg:max-w-[540px]">
-                  {/* Subtle decorative backing glow */}
-                  <div className="absolute -inset-4 bg-gradient-to-tr from-amber-300/30 via-orange-200/25 to-transparent rounded-[2.5rem] blur-2xl -z-10" />
+                {/* Continuous floating container */}
+                <motion.div
+                  animate={{
+                    y: [-6, 6, -6],
+                    rotate: [-0.4, 0.4, -0.4],
+                  }}
+                  transition={{
+                    duration: 7,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                  }}
+                  className="relative w-full max-w-[420px] sm:max-w-[540px] lg:max-w-[620px] xl:max-w-[680px]"
+                >
+                  {/* Decorative Multi-Layer Backing Glow */}
+                  <div className="absolute -inset-6 bg-gradient-to-tr from-amber-300/35 via-orange-300/30 to-amber-100/20 rounded-[3rem] blur-3xl -z-10" />
 
-                  {/* High Quality Hero Graphic */}
-                  <Image
-                    src="/images/landing/hero-match-flow.webp"
-                    alt="Scan event QR code, take a selfie, and find all matching event photos instantly"
-                    width={540}
-                    height={480}
-                    priority
-                    className="w-full h-auto object-contain drop-shadow-[0_24px_45px_rgba(110,65,30,0.16)] transform hover:scale-[1.015] transition-transform duration-300"
-                  />
+                  {/* High Quality Hero Graphic Showcase */}
+                  <div className="relative rounded-3xl overflow-hidden p-1 sm:p-2">
+                    <Image
+                      src="/images/landing/hero-match-flow.webp"
+                      alt="Scan event QR code, take a selfie, and find all matching event photos instantly"
+                      width={680}
+                      height={580}
+                      priority
+                      className="w-full h-auto object-contain drop-shadow-[0_28px_50px_rgba(110,65,30,0.2)] transform hover:scale-[1.015] transition-transform duration-500"
+                    />
 
-                  {/* Interactive Micro Floating Badge: Fast Match (HeroUI style) */}
+                    {/* Live AI Scanning Beam Line */}
+                    <motion.div
+                      animate={{ top: ["6%", "90%", "6%"] }}
+                      transition={{ duration: 4.5, repeat: Infinity, ease: "easeInOut" }}
+                      className="absolute left-6 right-6 h-[2px] bg-gradient-to-r from-transparent via-[#E65A15] to-transparent shadow-[0_0_14px_#E65A15] opacity-75 pointer-events-none z-20"
+                    />
+                  </div>
+
+                  {/* Interactive Micro Floating Badge: Fast Match (HeroUI / Claymorphism style) */}
                   <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.35, duration: 0.5 }}
-                    className="absolute -bottom-4 sm:-bottom-6 left-2 sm:-left-4 bg-white/95 backdrop-blur-md border border-[#EADECF] rounded-2xl p-3 sm:p-3.5 shadow-[0_16px_36px_rgba(70,35,15,0.15)] flex items-center gap-3"
+                    animate={{
+                      y: [0, -8, 0],
+                      rotate: [0, -0.8, 0],
+                    }}
+                    transition={{
+                      duration: 5.5,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                    }}
+                    className="absolute -bottom-6 sm:-bottom-8 left-0 sm:-left-6 z-20 bg-white/85 backdrop-blur-xl border border-white/80 rounded-2xl p-3.5 sm:p-4 shadow-[0_22px_45px_rgba(45,24,7,0.14),inset_0_1px_1px_rgba(255,255,255,0.95),0_0_24px_rgba(230,90,21,0.12)] flex items-center gap-3.5 hover:scale-[1.02] transition-transform duration-300"
                   >
-                    <div className="w-10 h-10 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-[#E65A15] shrink-0">
-                      <Icons.Sparkles size={20} />
+                    <div className="relative w-11 h-11 rounded-xl bg-gradient-to-tr from-[#E65A15] to-[#FF9843] flex items-center justify-center text-white shadow-[0_4px_14px_rgba(230,90,21,0.35)] shrink-0">
+                      <Icons.Sparkles size={22} />
+                      <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full border-2 border-white animate-pulse" />
                     </div>
                     <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                        <span className="text-xs font-bold text-[#2D1807]">
-                          14 photos matched in 0.38s
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs sm:text-sm font-extrabold text-[#2D1807]">
+                          24 photos matched
+                        </span>
+                        <span className="bg-emerald-500/15 text-emerald-700 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-500/20">
+                          0.38s
                         </span>
                       </div>
-                      <p className="text-[11px] text-[#7A6B62] font-semibold mt-0.5">
-                        MediaPipe 3D Landmark • 99.8% precision
+                      <p className="text-[11px] text-[#7A6B62] font-semibold mt-0.5 flex items-center gap-1">
+                        <span>On-Device Neural Mesh</span>
+                        <span className="text-[#E65A15] font-black">• 99.8% precision</span>
                       </p>
                     </div>
                   </motion.div>
 
                   {/* Top-Right Floating Privacy Badge */}
                   <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.5, duration: 0.5 }}
-                    className="absolute -top-3 right-0 sm:-right-3 bg-white/90 backdrop-blur-md border border-[#EADECF] rounded-full px-3 py-1 shadow-sm flex items-center gap-1.5 text-[11px] font-bold text-[#2D1807]"
+                    animate={{
+                      y: [0, 6, 0],
+                      rotate: [0, 1, 0],
+                    }}
+                    transition={{
+                      duration: 6,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                      delay: 0.8,
+                    }}
+                    className="absolute -top-4 sm:-top-5 right-1 sm:-right-4 z-20 bg-white/85 backdrop-blur-xl border border-white/80 rounded-full px-4 py-1.5 shadow-[0_12px_28px_rgba(45,24,7,0.1),inset_0_1px_1px_rgba(255,255,255,0.95)] flex items-center gap-2 text-xs font-bold text-[#2D1807]"
                   >
-                    <Icons.Lock size={12} className="text-[#E65A15]" />
-                    <span>100% Client-Side Privacy</span>
+                    <div className="w-5 h-5 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-600 shrink-0">
+                      <Icons.ShieldCheck size={13} strokeWidth={2.5} />
+                    </div>
+                    <span>100% Client-Side • Zero Face Data Stored</span>
                   </motion.div>
-                </div>
+
+                  {/* Left-Side Biometrics Float Pill */}
+                  <motion.div
+                    animate={{
+                      y: [0, -6, 0],
+                    }}
+                    transition={{
+                      duration: 5,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                      delay: 1.5,
+                    }}
+                    className="hidden sm:flex absolute top-12 -left-8 z-20 bg-white/85 backdrop-blur-xl border border-white/80 rounded-full px-3.5 py-1.5 shadow-[0_12px_28px_rgba(45,24,7,0.08),inset_0_1px_1px_rgba(255,255,255,0.95)] items-center gap-2 text-[11px] font-bold text-[#2D1807]"
+                  >
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                    <span>On-Device Wasm AI</span>
+                  </motion.div>
+                </motion.div>
               </motion.div>
 
               {/* Text & Actions Column: Appears SECOND on mobile, Left on Desktop */}
               <motion.div
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 25 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-                className="w-full lg:col-span-6 order-2 lg:order-1 relative z-10 text-center lg:text-left"
+                transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+                className="w-full lg:col-span-6 xl:col-span-6 order-2 lg:order-1 relative z-10 text-center lg:text-left"
               >
                 {/* Instant Badge */}
                 <Badge
                   variant="glow"
                   size="default"
                   dot
-                  className="mb-4 sm:mb-6 uppercase tracking-wider text-[11px]"
+                  className="mb-5 sm:mb-6 uppercase tracking-wider text-[11px] sm:text-xs font-bold px-3.5 py-1.5 shadow-[0_0_24px_rgba(230,90,21,0.2)] border-orange-500/35 bg-orange-500/10 backdrop-blur-md"
                 >
-                  <Icons.Sparkles size={13} className="shrink-0" />
-                  <span>Next-Gen Event Photo Discovery</span>
+                  <Icons.Sparkles size={14} className="shrink-0 text-[#E65A15]" />
+                  <span>The 0.4s Event Photo Search • No App Required</span>
                 </Badge>
 
-                <h1 className="text-3xl sm:text-5xl lg:text-[3.75rem] font-serif font-black text-[#2D1807] leading-[1.12] tracking-tight">
-                  Your event photos.<br />
-                  Found by your{" "}
-                  <span className="relative inline-block whitespace-nowrap text-[#E65A15]">
-                    face.
+                <h1 className="text-4xl sm:text-6xl lg:text-[4.15rem] xl:text-[4.75rem] font-serif font-black text-[#2D1807] leading-[1.06] tracking-tight">
+                  Every event photo you&apos;re in.<br className="hidden sm:inline" />
+                  {" "}Found in seconds by{" "}
+                  <span className="relative inline-block whitespace-nowrap text-[#E65A15] drop-shadow-[0_4px_16px_rgba(230,90,21,0.18)]">
+                    your face.
                     <svg
-                      className="absolute -bottom-1 sm:-bottom-2 left-0 w-full overflow-visible"
-                      height="12"
-                      viewBox="0 0 110 12"
+                      className="absolute -bottom-1.5 sm:-bottom-2.5 left-0 w-full overflow-visible"
+                      height="14"
+                      viewBox="0 0 110 14"
                       fill="none"
                       preserveAspectRatio="none"
                     >
-                      <path
-                        d="M2 9C32 2 78 2 108 8"
+                      <motion.path
+                        initial={{ pathLength: 0 }}
+                        animate={{ pathLength: 1 }}
+                        transition={{ duration: 1.2, delay: 0.4, ease: "easeOut" }}
+                        d="M2 10C35 3 75 3 108 9"
                         stroke="#E65A15"
-                        strokeWidth="3.5"
+                        strokeWidth="4"
                         strokeLinecap="round"
                       />
                     </svg>
                   </span>
                 </h1>
 
-                <p className="mt-4 sm:mt-6 text-[#5C4D43] text-sm sm:text-lg leading-relaxed max-w-xl mx-auto lg:mx-0 font-medium">
-                  Scan your event&apos;s QR code, take a 2-second selfie, and let our on-device AI instantly locate every high-resolution photo you appear in. No app install needed.
+                <p className="mt-5 sm:mt-7 text-[#5C4D43] text-base sm:text-xl leading-relaxed max-w-xl mx-auto lg:mx-0 font-normal">
+                  Scan the event QR, snap a private 2-second selfie, and watch on-device AI find every portrait, candid, and stage moment you appear in. Zero app downloads. Zero waiting. 100% private.
                 </p>
 
                 {/* Hero CTA Buttons */}
-                <div className="mt-7 sm:mt-9 flex flex-row items-center justify-center lg:justify-start gap-3 sm:gap-4 w-full">
-                  <Link href="/find" className="flex-1 sm:flex-none">
-                    <Button
-                      variant="gradient"
-                      size="xl"
-                      className="w-full sm:w-auto shadow-clay-btn gap-2 text-sm sm:text-base"
-                    >
-                      <Icons.Image size={18} className="shrink-0" strokeWidth={2.2} />
-                      <span>Find my photos</span>
-                    </Button>
-                  </Link>
+                <div className="mt-8 sm:mt-10 flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3.5 sm:gap-4 w-full">
+                  <div className="relative group w-full sm:w-auto">
+                    <div className="absolute -inset-1 rounded-2xl bg-gradient-to-r from-[#E65A15] via-amber-500 to-[#FF9843] opacity-45 blur-lg group-hover:opacity-75 transition-opacity duration-300" />
+                    <Link href="/find" className="relative block w-full sm:w-auto">
+                      <Button
+                        variant="gradient"
+                        size="xl"
+                        className="w-full sm:w-auto shadow-clay-btn gap-2.5 text-base sm:text-lg font-extrabold px-8 py-4 h-14"
+                      >
+                        <Icons.FaceId size={20} className="shrink-0" strokeWidth={2.4} />
+                        <span>Find My Event Photos</span>
+                        <Icons.ArrowRight size={18} className="shrink-0 transition-transform group-hover:translate-x-1" />
+                      </Button>
+                    </Link>
+                  </div>
 
-                  <a href="#live-demo" className="flex-1 sm:flex-none">
+                  <a href="#live-demo" className="w-full sm:w-auto">
                     <Button
                       variant="clay"
                       size="xl"
-                      className="w-full sm:w-auto gap-2 text-sm sm:text-base"
+                      className="w-full sm:w-auto shadow-clay-card gap-2.5 text-base sm:text-lg font-bold px-7 py-4 h-14 border border-[#EADECF] hover:border-[#E65A15]/40"
                     >
-                      <Icons.Sparkles size={18} className="shrink-0 text-[#E65A15]" strokeWidth={2} />
-                      <span>Try Live Demo</span>
+                      <Icons.Sparkles size={20} className="shrink-0 text-[#E65A15]" strokeWidth={2.2} />
+                      <span>See 0.4s Live Demo</span>
                     </Button>
                   </a>
                 </div>
 
-                {/* Quick Trust Signals */}
-                <div className="mt-8 pt-6 border-t border-[#F0E6D8]/80 flex flex-wrap items-center justify-center lg:justify-start gap-4 sm:gap-6 text-xs text-[#7A6B62] font-semibold">
-                  <div className="flex items-center gap-1.5">
-                    <Icons.CheckCircle size={15} className="text-[#E65A15]" />
-                    <span>Zero app install</span>
+                {/* Quick Trust Signals & Feature Highlights */}
+                <div className="mt-8 pt-6 border-t border-[#F0E6D8]/80 flex flex-wrap items-center justify-center lg:justify-start gap-3 sm:gap-4 text-xs text-[#5C4D43] font-semibold">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/70 border border-[#EADECF]/80 shadow-xs">
+                    <Icons.CheckCircle size={14} className="text-[#E65A15] shrink-0" />
+                    <span>Zero App Install</span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <Icons.CheckCircle size={15} className="text-[#E65A15]" />
-                    <span>0.4s private matching</span>
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/70 border border-[#EADECF]/80 shadow-xs">
+                    <Icons.Zap size={14} className="text-[#E65A15] shrink-0" />
+                    <span>0.4s Neural Match</span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <Icons.CheckCircle size={15} className="text-[#E65A15]" />
-                    <span>Full-res RAW / JPEG</span>
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/70 border border-[#EADECF]/80 shadow-xs">
+                    <Icons.ShieldCheck size={14} className="text-[#E65A15] shrink-0" />
+                    <span>Private & Ephemeral</span>
+                  </div>
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/70 border border-[#EADECF]/80 shadow-xs">
+                    <Icons.Download size={14} className="text-[#E65A15] shrink-0" />
+                    <span>Original High-Res RAW</span>
                   </div>
                 </div>
               </motion.div>
@@ -478,7 +570,7 @@ export function LandingPage() {
         {/* ========================================================================= */}
         {/* 3. METRIC TICKER & VALUE BAR (AlignUI / HeroUI inspired stats)            */}
         {/* ========================================================================= */}
-        <section className="py-8 bg-white/60 border-y border-[#F0E6D8]/70 backdrop-blur-sm">
+        <section className="py-8 bg-white/70 border-y border-[#F0E6D8]/80 backdrop-blur-md">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 lg:gap-8 items-center text-center">
               
@@ -487,10 +579,10 @@ export function LandingPage() {
                   99.8%
                 </div>
                 <div className="text-xs sm:text-sm font-bold text-[#2D1807] mt-1">
-                  Match Accuracy
+                  Facial Match Accuracy
                 </div>
                 <div className="text-[11px] text-[#7A6B62] font-medium mt-0.5">
-                  MediaPipe 468 landmark points
+                  MediaPipe 468 3D mesh points
                 </div>
               </div>
 
@@ -499,10 +591,10 @@ export function LandingPage() {
                   0.38s
                 </div>
                 <div className="text-xs sm:text-sm font-bold text-[#2D1807] mt-1">
-                  Retrieval Speed
+                  Discovery Latency
                 </div>
                 <div className="text-[11px] text-[#7A6B62] font-medium mt-0.5">
-                  Sub-second vector indexing
+                  Sub-second client vector indexing
                 </div>
               </div>
 
@@ -511,22 +603,22 @@ export function LandingPage() {
                   100%
                 </div>
                 <div className="text-xs sm:text-sm font-bold text-[#2D1807] mt-1">
-                  Ephemeral Privacy
+                  Private & Ephemeral
                 </div>
                 <div className="text-[11px] text-[#7A6B62] font-medium mt-0.5">
-                  0 bytes stored on server
+                  0 bytes biometric storage on server
                 </div>
               </div>
 
               <div className="p-3">
                 <div className="font-serif font-black text-3xl sm:text-4xl text-[#2D1807] tracking-tight">
-                  50k+
+                  50,000+
                 </div>
                 <div className="text-xs sm:text-sm font-bold text-[#2D1807] mt-1">
-                  Celebration Photos
+                  Memories Delivered
                 </div>
                 <div className="text-[11px] text-[#7A6B62] font-medium mt-0.5">
-                  Weddings, summits & galas
+                  Across weddings, galas & summits
                 </div>
               </div>
 

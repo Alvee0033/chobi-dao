@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.chobidao.chobi_dao"
-    compileSdk = 34
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

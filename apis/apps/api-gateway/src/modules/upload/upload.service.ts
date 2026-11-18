@@ -254,6 +254,50 @@ export class UploadService {
     return withUrls;
   }
 
+  private async consolidatePeople(eventId: string): Promise<void> {
+    try {
+      const pairs = await this.prisma.$queryRawUnsafe<
+        Array<{ person_a: string; person_b: string }>
+      >(
+        `SELECT
+           fa.person_id AS person_a,
+           fb.person_id AS person_b
+         FROM "face_embeddings" ea
+         JOIN "faces" fa ON fa.id = ea.id::text
+         JOIN "face_embeddings" eb ON eb.event_id = ea.event_id
+         JOIN "faces" fb ON fb.id = eb.id::text
+         WHERE ea.event_id = $1::uuid
+           AND fa.person_id != fb.person_id
+           AND fa.person_id IS NOT NULL
+           AND fb.person_id IS NOT NULL
+           AND ea.photo_id != eb.photo_id
+         GROUP BY fa.person_id, fb.person_id
+         HAVING AVG(1 - (ea.embedding <=> eb.embedding)) >= 0.56
+           AND fa.person_id < fb.person_id
+         LIMIT 25`,
+        eventId,
+      );
+
+      for (const pair of pairs) {
+        const [pA, pB] = await Promise.all([
+          this.prisma.person.findUnique({ where: { id: pair.person_a }, include: { faces: true } }),
+          this.prisma.person.findUnique({ where: { id: pair.person_b }, include: { faces: true } }),
+        ]);
+        if (!pA || !pB) continue;
+        const targetId = pA.faces.length >= pB.faces.length ? pair.person_a : pair.person_b;
+        const sourceId = targetId === pair.person_a ? pair.person_b : pair.person_a;
+        await this.prisma.face.updateMany({ where: { personId: sourceId }, data: { personId: targetId } });
+        await this.prisma.person.delete({ where: { id: sourceId } }).catch(() => undefined);
+      }
+
+      await this.prisma.person.deleteMany({
+        where: { eventId, faces: { none: {} } }
+      }).catch(() => undefined);
+    } catch {
+      // Best-effort consolidation
+    }
+  }
+
   async people(photographerId: string, eventId: string, apiBase?: string): Promise<EventPersonSummary[]> {
     if (!this.env.ENABLE_PEOPLE_STORIES) return [];
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
@@ -261,6 +305,8 @@ export class UploadService {
 
     const cached = this.peopleCache.get(eventId);
     if (cached && cached.expiresAt > Date.now()) return cached.value;
+
+    await this.consolidatePeople(eventId);
 
     const people = await this.prisma.person.findMany({
       where: { eventId },
@@ -295,7 +341,13 @@ export class UploadService {
         };
       })
       .filter((item): item is EventPersonSummary => Boolean(item))
-      .sort((a, b) => b.photoCount - a.photoCount);
+      .sort((a, b) => b.photoCount - a.photoCount)
+      .map((item, index) => {
+        const cleanLabel = item.label && !item.label.startsWith("Person ")
+          ? item.label
+          : `Person ${index + 1}`;
+        return { ...item, label: cleanLabel };
+      });
 
     this.peopleCache.set(eventId, { value: summaries, expiresAt: Date.now() + 10_000 });
     return summaries;

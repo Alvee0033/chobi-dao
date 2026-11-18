@@ -17,13 +17,14 @@ class AnalyticsScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.creamCanvas,
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         title: const Text("Performance & Analytics"),
       ),
       body: RefreshIndicator(
         onRefresh: eventProvider.fetchDashboardStats,
         color: AppColors.brandOrange,
         child: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
           children: [
             Container(
               padding: const EdgeInsets.all(20),
@@ -236,6 +237,7 @@ class AnalyticsScreen extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
+                            const SizedBox(width: 8),
                             Text(
                               "$mockDelivered / ${ev.totalPhotos} photos",
                               style: const TextStyle(
@@ -299,12 +301,16 @@ class AnalyticsScreen extends StatelessWidget {
             child: Icon(icon, color: color, size: 20),
           ),
           const SizedBox(height: 12),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: AppColors.charcoal,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: AppColors.charcoal,
+              ),
             ),
           ),
           const SizedBox(height: 2),
@@ -315,6 +321,8 @@ class AnalyticsScreen extends StatelessWidget {
               color: AppColors.textSecondary,
               fontWeight: FontWeight.w500,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),

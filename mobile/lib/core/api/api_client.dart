@@ -1,8 +1,10 @@
 import 'package:dio/dio.dart';
+import '../config/app_config.dart';
 import '../storage/token_storage.dart';
 
 class ApiClient {
-  static const String defaultBaseUrl = 'https://api-chobi.203.96.190.78.sslip.io';
+  static String get defaultBaseUrl => AppConfig.apiBaseUrl;
+  static String get defaultWebBaseUrl => AppConfig.webBaseUrl;
 
   final Dio _dio;
   final Dio _refreshDio;
@@ -10,14 +12,14 @@ class ApiClient {
   void Function()? onAuthFailed;
 
   ApiClient({
-    String baseUrl = defaultBaseUrl,
+    String? baseUrl,
     TokenStorage? tokenStorage,
     Dio? dio,
   })  : _tokenStorage = tokenStorage ?? TokenStorage(),
         _dio = dio ??
             Dio(
               BaseOptions(
-                baseUrl: baseUrl,
+                baseUrl: baseUrl ?? AppConfig.apiBaseUrl,
                 connectTimeout: const Duration(seconds: 20),
                 receiveTimeout: const Duration(seconds: 25),
                 sendTimeout: const Duration(seconds: 30),
@@ -29,7 +31,7 @@ class ApiClient {
             ),
         _refreshDio = Dio(
           BaseOptions(
-            baseUrl: baseUrl,
+            baseUrl: baseUrl ?? AppConfig.apiBaseUrl,
             connectTimeout: const Duration(seconds: 15),
             receiveTimeout: const Duration(seconds: 15),
             headers: {'Accept': 'application/json'},
@@ -177,6 +179,27 @@ class ApiClient {
       path,
       data: formData,
       options: Options(headers: {'Content-Type': 'multipart/form-data'}),
+      onSendProgress: onSendProgress,
+    );
+  }
+
+  Future<Response<dynamic>> uploadDirectPhoto({
+    required String eventId,
+    required String photoId,
+    required List<int> bytes,
+    String contentType = 'image/jpeg',
+    void Function(int sent, int total)? onSendProgress,
+  }) async {
+    final path = '/v1/events/$eventId/photos/$photoId/upload-direct';
+    return _dio.put(
+      path,
+      data: Stream.fromIterable([bytes]),
+      options: Options(
+        headers: {
+          'Content-Type': contentType,
+          'Content-Length': bytes.length.toString(),
+        },
+      ),
       onSendProgress: onSendProgress,
     );
   }
