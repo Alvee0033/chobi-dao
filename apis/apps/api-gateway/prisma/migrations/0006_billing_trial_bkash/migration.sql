@@ -10,5 +10,5 @@ ALTER TABLE "subscriptions"
   ADD COLUMN "currency" TEXT NOT NULL DEFAULT 'BDT',
   ADD COLUMN "current_period_end" TIMESTAMPTZ(6);
 
-CREATE UNIQUE INDEX "subscriptions_provider_payment_id_key" ON "subscriptions"("provider_payment_id");
+CREATE INDEX "subscriptions_provider_payment_id_idx" ON "subscriptions"("provider_payment_id");
 CREATE INDEX "scan_events_event_created_idx" ON "scan_events"("event_id", "created_at");

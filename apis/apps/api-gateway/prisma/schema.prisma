@@ -206,7 +206,7 @@ model Subscription {
   photographerId String   @map("photographer_id") @db.Uuid
   stripeSubId    String?  @unique @map("stripe_sub_id")
   provider       String   @default("bkash")
-  providerPaymentId String? @unique @map("provider_payment_id")
+  providerPaymentId String? @map("provider_payment_id")
   transactionId  String?  @map("transaction_id")
   amount         Decimal? @db.Decimal(10, 2)
   currency       String   @default("BDT")
@@ -218,6 +218,7 @@ model Subscription {
 
   photographer   Photographer @relation(fields: [photographerId], references: [id], onDelete: Cascade)
 
+  @@index([providerPaymentId])
   @@map("subscriptions")
 }
 

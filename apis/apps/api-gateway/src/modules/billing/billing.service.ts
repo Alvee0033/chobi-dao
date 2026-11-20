@@ -90,7 +90,7 @@ export class BillingService {
 
   async completeCheckout(paymentId: string, callbackStatus: string) {
     if (!paymentId || paymentId.length > 128) throw new BadRequestException("Invalid bKash payment reference");
-    const attempt = await this.prisma.subscription.findUnique({ where: { providerPaymentId: paymentId } });
+    const attempt = await this.prisma.subscription.findFirst({ where: { providerPaymentId: paymentId } });
     if (!attempt || attempt.provider !== "bkash") throw new NotFoundException("Payment attempt not found");
     if (attempt.status === "succeeded") return { ok: true, photographerId: attempt.photographerId };
     if (callbackStatus !== "success") {
@@ -114,13 +114,12 @@ export class BillingService {
       orderBy: { currentPeriodEnd: "desc" }, select: { currentPeriodEnd: true },
     });
     const currentPeriodEnd = new Date(Math.max(now.getTime(), previous?.currentPeriodEnd?.getTime() ?? 0) + PAID_PLAN_DAYS * 86_400_000);
-    await this.prisma.$transaction([
-      this.prisma.subscription.update({
-        where: { id: attempt.id },
-        data: { status: "succeeded", transactionId: execution.trxID, currentPeriodEnd },
-      }),
-      this.prisma.photographer.update({ where: { id: attempt.photographerId }, data: { plan: "pro" } }),
-    ]);
+    const activated = await this.prisma.subscription.updateMany({
+      where: { id: attempt.id, status: "pending" },
+      data: { status: "succeeded", transactionId: execution.trxID, currentPeriodEnd },
+    });
+    if (!activated.count) return { ok: true, photographerId: attempt.photographerId };
+    await this.prisma.photographer.update({ where: { id: attempt.photographerId }, data: { plan: "pro" } });
     return { ok: true, photographerId: attempt.photographerId };
   }
 

@@ -41,7 +41,7 @@ describe("BillingService bKash checkout", () => {
     useSandboxEnvironment();
     const attempt = { id: "sub-1", provider: "bkash", providerPaymentId: "payment-123", photographerId: "photographer-1", status: "pending" };
     const prisma = {
-      subscription: { findUnique: jest.fn().mockResolvedValue(attempt), update: jest.fn().mockResolvedValue({}) },
+      subscription: { findFirst: jest.fn().mockResolvedValue(attempt), update: jest.fn().mockResolvedValue({}) },
       photographer: { update: jest.fn() },
       $transaction: jest.fn(),
     } as any;
@@ -60,12 +60,11 @@ describe("BillingService bKash checkout", () => {
     const attempt = { id: "sub-1", provider: "bkash", providerPaymentId: "payment-123", photographerId: "photographer-1", status: "pending" };
     const prisma = {
       subscription: {
-        findUnique: jest.fn().mockResolvedValue(attempt),
-        findFirst: jest.fn().mockResolvedValue(null),
+        findFirst: jest.fn().mockResolvedValueOnce(attempt).mockResolvedValueOnce(null),
         update: jest.fn().mockResolvedValue({}),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       photographer: { update: jest.fn().mockResolvedValue({}) },
-      $transaction: jest.fn().mockResolvedValue([]),
     } as any;
     global.fetch = jest.fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ id_token: "sandbox-id-token" }) })
@@ -73,7 +72,6 @@ describe("BillingService bKash checkout", () => {
     const service = new BillingService(prisma);
 
     await expect(service.completeCheckout("payment-123", "success")).resolves.toMatchObject({ ok: true, photographerId: "photographer-1" });
-    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-    expect(prisma.subscription.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "succeeded", transactionId: "trx-1", currentPeriodEnd: expect.any(Date) }) }));
+    expect(prisma.subscription.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "sub-1", status: "pending" }, data: expect.objectContaining({ status: "succeeded", transactionId: "trx-1", currentPeriodEnd: expect.any(Date) }) }));
   });
 });
