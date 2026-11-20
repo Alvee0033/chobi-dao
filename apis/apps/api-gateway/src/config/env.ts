@@ -24,6 +24,8 @@ export const envSchema = z.object({
   UDDOKTAPAY_API_KEY: z.string().default(""),
   APP_BASE_URL: z.string().default("http://localhost:3000"),
   API_BASE_URL: z.string().default("http://localhost:3001"),
+  RESEND_API_KEY: z.string().default(""),
+  AUTH_EMAIL_FROM: z.string().default(""),
   // AI Service (InsightFace self-hosted)
   AI_SERVICE_URL: z.string().default("http://localhost:8000"),
   // Local S3 / MinIO Storage Bucket & Local Filesystem

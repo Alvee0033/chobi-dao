@@ -174,11 +174,6 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [deleteConfirm, setDeleteConfirm] = useState<{ eventId: string; onSuccess?: () => void } | null>(null);
   const [qrDataForPrint, setQrDataForPrint] = useState<string>("");
-  const [settingsState, setSettingsState] = useState({
-    publicProfile: true,
-    emailNotifications: false,
-    autoOptimization: true
-  });
   const isDriveConnected = true;
   const resolveDriveConnected = (..._args: any[]) => true;
 
@@ -909,7 +904,7 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
           ) : activeTab === "analytics" ? (
             <AnalyticsSection analyticsData={analyticsData} isLoadingAnalytics={isLoadingAnalytics} />
           ) : (
-            <SettingsSection auth={auth} settingsState={settingsState} setSettingsState={setSettingsState} showToast={showToast} />
+            <SettingsSection auth={auth!} />
           )}
         </div>
       )}

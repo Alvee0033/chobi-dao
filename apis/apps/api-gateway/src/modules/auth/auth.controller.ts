@@ -25,6 +25,16 @@ export class AuthController {
   @Post("signup")
   signup(@Body() dto: SignupDto) { return this.authService.signup(dto); }
 
+  @Post("verify-email")
+  verifyEmail(@Body("email") email: string, @Body("code") code: string) {
+    return this.authService.verifyPhotographerEmail(email ?? "", code ?? "");
+  }
+
+  @Post("resend-verification")
+  resendVerification(@Body("email") email: string) {
+    return this.authService.resendPhotographerVerification(email ?? "");
+  }
+
   @Post("login")
   login(@Body() dto: LoginDto) { return this.authService.login(dto); }
 

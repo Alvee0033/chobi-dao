@@ -17,6 +17,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _verificationCodeController = TextEditingController();
+  bool _verificationPending = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   int _selectedTierTab = 0;
@@ -27,13 +29,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _verificationCodeController.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
-
     final authProvider = context.read<AuthProvider>();
+    if (_verificationPending) {
+      if (!RegExp(r'^\d{6}$').hasMatch(_verificationCodeController.text.trim())) return;
+      final verified = await authProvider.verifyEmailCode(_verificationCodeController.text);
+      if (mounted && verified) Navigator.pop(context);
+      return;
+    }
+    if (!_formKey.currentState!.validate()) return;
     final success = await authProvider.register(
       _nameController.text.trim(),
       _emailController.text.trim(),
@@ -42,8 +50,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     if (!mounted) return;
     if (success) {
-      Navigator.pop(context);
+      if (authProvider.pendingEmailVerification != null) {
+        setState(() => _verificationPending = true);
+      } else {
+        Navigator.pop(context);
+      }
     }
+  }
+
+  Future<void> _resendCode() async {
+    final sent = await context.read<AuthProvider>().resendVerificationCode();
+    if (!mounted || !sent) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('A new verification code has been sent.')));
   }
 
   @override
@@ -86,7 +104,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ),
           ),
         ),
-        title: const Text('Create Account'),
+        title: Text(_verificationPending ? 'Verify Email' : 'Create Account'),
       ),
       body: Stack(
         children: [
@@ -242,6 +260,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             const SizedBox(height: 18),
                           ],
 
+                          if (_verificationPending) ...[
+                            Text('Check your inbox', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+                            const SizedBox(height: 8),
+                            Text('Enter the 6-digit code sent to ${authProvider.pendingEmailVerification ?? _emailController.text}.', style: const TextStyle(color: AppColors.textSecondary, height: 1.5)),
+                            const SizedBox(height: 20),
+                            TextFormField(
+                              controller: _verificationCodeController,
+                              keyboardType: TextInputType.number,
+                              autofillHints: const [AutofillHints.oneTimeCode],
+                              maxLength: 6,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w700, letterSpacing: 8),
+                              decoration: const InputDecoration(labelText: 'Verification code', hintText: '000000', counterText: ''),
+                              validator: (value) => RegExp(r'^\d{6}$').hasMatch(value?.trim() ?? '') ? null : 'Enter the 6-digit code',
+                              onFieldSubmitted: (_) => _submit(),
+                            ),
+                            const SizedBox(height: 20),
+                            HeroButton(text: 'Verify email', variant: HeroButtonVariant.solid, size: HeroButtonSize.lg, isFullWidth: true, isLoading: authProvider.isLoading, icon: const Icon(Icons.arrow_forward_rounded, size: 18, color: Colors.white), onPressed: _submit),
+                            TextButton(onPressed: authProvider.isLoading ? null : _resendCode, child: const Text('Send a new code')),
+                          ] else ...[
                           // Photographer or Studio Name
                           HeroTextField(
                             controller: _nameController,
@@ -372,6 +410,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             icon: const Icon(Icons.arrow_forward_rounded, size: 18, color: Colors.white),
                             onPressed: _submit,
                           ),
+                          ],
                         ],
                       ),
                     ),

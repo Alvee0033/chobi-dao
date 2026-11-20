@@ -6,7 +6,6 @@ import { getPhotographerAnalytics, type PhotographerAnalytics } from "@/lib/api"
 import { Icons } from "../../icons";
 import type { DashboardAuthState, ShowToast } from "../../types";
 import { DashboardWorkspaceShell, type WorkspaceSection } from "./DashboardWorkspaceShell";
-import type { SettingsState } from "./model";
 import "./dashboard-sections.css";
 
 const AnalyticsSection = dynamic(() => import("./AnalyticsSection").then((module) => module.AnalyticsSection), { loading: () => <SectionLoading /> });
@@ -25,7 +24,6 @@ export function DashboardSectionRoute({ section, auth, onLogout, showToast }: {
 }) {
   const [analytics, setAnalytics] = useState<PhotographerAnalytics | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(section === "analytics");
-  const [settings, setSettings] = useState<SettingsState>({ publicProfile: true, emailNotifications: false, autoOptimization: true });
 
   useEffect(() => {
     if (section !== "analytics") return;
@@ -38,8 +36,10 @@ export function DashboardSectionRoute({ section, auth, onLogout, showToast }: {
   }, [auth.accessToken, section, showToast]);
 
   return <DashboardWorkspaceShell section={section} auth={auth} onLogout={onLogout}>
-    {section === "analytics" ? <AnalyticsSection analyticsData={analytics} isLoadingAnalytics={analyticsLoading} /> : null}
-    {section === "billing" ? <BillingSection auth={auth} showToast={showToast} /> : null}
-    {section === "settings" ? <SettingsSection auth={auth} settingsState={settings} setSettingsState={setSettings} showToast={showToast} /> : null}
+    <div className="cd-route-transition" key={section}>
+      {section === "analytics" ? <AnalyticsSection analyticsData={analytics} isLoadingAnalytics={analyticsLoading} /> : null}
+      {section === "billing" ? <BillingSection auth={auth} showToast={showToast} /> : null}
+      {section === "settings" ? <SettingsSection auth={auth} /> : null}
+    </div>
   </DashboardWorkspaceShell>;
 }

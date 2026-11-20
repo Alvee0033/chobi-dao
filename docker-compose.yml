@@ -92,6 +92,8 @@ services:
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-chobi_super_refresh_secret_key_2026_xyz}
       LIVENESS_TOKEN_SECRET: ${LIVENESS_TOKEN_SECRET:-chobi_liveness_secret_key_2026}
       SEARCH_SESSION_SECRET: ${SEARCH_SESSION_SECRET:-chobi_search_secret_key_2026}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      AUTH_EMAIL_FROM: ${AUTH_EMAIL_FROM:-}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
       API_BASE_URL: ${API_BASE_URL:-http://localhost:3001}
       AI_SERVICE_URL: http://ai-service:8000

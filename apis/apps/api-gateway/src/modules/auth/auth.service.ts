@@ -1,8 +1,10 @@
-import { ConflictException, Injectable, UnauthorizedException } from "@nestjs/common";
+import { ConflictException, Injectable, UnauthorizedException, BadRequestException, HttpException, HttpStatus } from "@nestjs/common";
 import { PrismaService } from "../../common/services/prisma.service";
 import { GoogleDriveStorageService } from "../../common/services/storage.service";
+import { AuthEmailService } from "./auth-email.service";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
 import { google } from "googleapis";
 import { parseEnv } from "../../config/env";
 import type { AuthActorType, LoginDto, SignupDto } from "@framefind/shared-contracts";
@@ -16,6 +18,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly driveStorage: GoogleDriveStorageService,
+    private readonly authEmail: AuthEmailService,
   ) {}
 
   private computeDriveConnected(_photographer?: {
@@ -30,25 +33,33 @@ export class AuthService {
   // ─── Email / Password Auth ────────────────────────────────────────────────
 
   async signupPhotographer(dto: SignupDto) {
-    const existing = await this.prisma.photographer.findUnique({ where: { email: dto.email.toLowerCase() } });
+    this.authEmail.assertConfigured();
+    const email = dto.email.toLowerCase();
+    const existing = await this.prisma.photographer.findUnique({ where: { email } });
     if (existing) throw new ConflictException("Email already registered");
     const passwordHash = await bcrypt.hash(dto.password, 12);
+    const code = this.createVerificationCode();
+    const now = new Date();
     const photographer = await this.prisma.photographer.create({
-      data: { email: dto.email.toLowerCase(), name: dto.name, passwordHash },
+      data: {
+        email,
+        name: dto.name,
+        passwordHash,
+        emailVerified: false,
+        emailVerificationCodeHash: this.hashVerificationCode(email, code),
+        emailVerificationExpiresAt: new Date(now.getTime() + 10 * 60_000),
+        emailVerificationSentAt: now,
+        emailVerificationAttempts: 0,
+      },
     });
-    return this.issuePhotographerTokens(
-      photographer.id,
-      photographer.email,
-      photographer.name,
-      photographer.plan,
-      this.computeDriveConnected(photographer),
-      photographer.driveRootFolderId ?? null,
-    );
+    await this.authEmail.sendVerificationCode(email, photographer.name, code);
+    return { verificationRequired: true as const, email };
   }
 
   async loginPhotographer(dto: LoginDto) {
     const photographer = await this.prisma.photographer.findUnique({ where: { email: dto.email.toLowerCase() } });
     if (!photographer?.passwordHash) throw new UnauthorizedException("Invalid credentials");
+    if (!photographer.emailVerified) throw new UnauthorizedException("Verify your email before signing in.");
     const ok = await bcrypt.compare(dto.password, photographer.passwordHash);
     if (!ok) throw new UnauthorizedException("Invalid credentials");
     return this.issuePhotographerTokens(
@@ -80,6 +91,81 @@ export class AuthService {
   /** Backward-compat aliases */
   async signup(dto: SignupDto) { return this.signupPhotographer(dto); }
   async login(dto: LoginDto) { return this.loginPhotographer(dto); }
+
+  async verifyPhotographerEmail(emailInput: string, codeInput: string) {
+    const email = emailInput.trim().toLowerCase();
+    const code = codeInput.trim();
+    if (!/^\d{6}$/.test(code)) throw new BadRequestException("Enter the 6-digit code from your email.");
+    const photographer = await this.prisma.photographer.findUnique({ where: { email } });
+    if (!photographer || photographer.emailVerified || !photographer.emailVerificationCodeHash || !photographer.emailVerificationExpiresAt) {
+      throw new UnauthorizedException("That code is invalid or expired. Request a new one and try again.");
+    }
+    if (photographer.emailVerificationExpiresAt <= new Date() || photographer.emailVerificationAttempts >= 5) {
+      throw new UnauthorizedException("That code is invalid or expired. Request a new one and try again.");
+    }
+    const matches = this.constantTimeCodeMatch(email, code, photographer.emailVerificationCodeHash);
+    if (!matches) {
+      await this.prisma.photographer.updateMany({
+        where: { id: photographer.id, emailVerified: false, emailVerificationAttempts: { lt: 5 } },
+        data: { emailVerificationAttempts: { increment: 1 } },
+      });
+      throw new UnauthorizedException("That code is invalid or expired. Request a new one and try again.");
+    }
+    const consumed = await this.prisma.photographer.updateMany({
+      where: {
+        id: photographer.id,
+        emailVerified: false,
+        emailVerificationCodeHash: photographer.emailVerificationCodeHash,
+        emailVerificationExpiresAt: { gt: new Date() },
+        emailVerificationAttempts: { lt: 5 },
+      },
+      data: { emailVerified: true, emailVerificationCodeHash: null, emailVerificationExpiresAt: null, emailVerificationSentAt: null },
+    });
+    if (consumed.count !== 1) throw new UnauthorizedException("That code is invalid or expired. Request a new one and try again.");
+    return this.issuePhotographerTokens(
+      photographer.id,
+      photographer.email,
+      photographer.name,
+      photographer.plan,
+      this.computeDriveConnected(photographer),
+      photographer.driveRootFolderId ?? null,
+    );
+  }
+
+  async resendPhotographerVerification(emailInput: string) {
+    const email = emailInput.trim().toLowerCase();
+    const photographer = await this.prisma.photographer.findUnique({ where: { email } });
+    if (!photographer || photographer.emailVerified || !photographer.passwordHash) return { ok: true as const };
+    const now = new Date();
+    if (photographer.emailVerificationSentAt && now.getTime() - photographer.emailVerificationSentAt.getTime() < 60_000) {
+      throw new HttpException("Wait a minute before requesting another code.", HttpStatus.TOO_MANY_REQUESTS);
+    }
+    this.authEmail.assertConfigured();
+    const code = this.createVerificationCode();
+    const updated = await this.prisma.photographer.updateMany({
+      where: { id: photographer.id, emailVerified: false },
+      data: {
+        emailVerificationCodeHash: this.hashVerificationCode(email, code),
+        emailVerificationExpiresAt: new Date(now.getTime() + 10 * 60_000),
+        emailVerificationSentAt: now,
+        emailVerificationAttempts: 0,
+      },
+    });
+    if (updated.count === 1) await this.authEmail.sendVerificationCode(email, photographer.name, code);
+    return { ok: true as const };
+  }
+
+  private createVerificationCode() { return randomInt(100_000, 1_000_000).toString(); }
+
+  private hashVerificationCode(email: string, code: string) {
+    return createHmac("sha256", this.env.JWT_REFRESH_SECRET).update(`${email}:${code}`).digest("hex");
+  }
+
+  private constantTimeCodeMatch(email: string, code: string, expectedHash: string) {
+    const actual = Buffer.from(this.hashVerificationCode(email, code), "hex");
+    const expected = Buffer.from(expectedHash, "hex");
+    return actual.length === expected.length && timingSafeEqual(actual, expected);
+  }
 
   // ─── Google OAuth ─────────────────────────────────────────────────────────
 

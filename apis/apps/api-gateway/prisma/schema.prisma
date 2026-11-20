@@ -40,6 +40,11 @@ model Photographer {
   email                 String         @unique
   name                  String?
   passwordHash          String?        @map("password_hash")
+  emailVerified         Boolean        @default(true) @map("email_verified")
+  emailVerificationCodeHash String?    @map("email_verification_code_hash")
+  emailVerificationExpiresAt DateTime? @map("email_verification_expires_at") @db.Timestamptz(6)
+  emailVerificationSentAt DateTime?   @map("email_verification_sent_at") @db.Timestamptz(6)
+  emailVerificationAttempts Int       @default(0) @map("email_verification_attempts")
   googleId              String?        @unique @map("google_id")
   googleAccessToken     String?        @map("google_access_token")  @db.Text
   googleRefreshToken    String?        @map("google_refresh_token") @db.Text

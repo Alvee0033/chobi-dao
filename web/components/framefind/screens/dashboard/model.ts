@@ -13,5 +13,3 @@ export type UploadItem = {
 };
 
 export const localPreviewCache: Record<string, string> = {};
-
-export type SettingsState = { publicProfile: boolean; emailNotifications: boolean; autoOptimization: boolean };

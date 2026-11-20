@@ -11,6 +11,7 @@ class AuthProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool _isInitialized = false;
   String? _errorMessage;
+  String? _pendingEmailVerification;
 
   AuthProvider({
     ApiClient? apiClient,
@@ -27,6 +28,7 @@ class AuthProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isInitialized => _isInitialized;
   String? get errorMessage => _errorMessage;
+  String? get pendingEmailVerification => _pendingEmailVerification;
 
   void clearError() {
     if (_errorMessage != null) {
@@ -97,12 +99,62 @@ class AuthProvider extends ChangeNotifier {
       final photographerData = (data['photographer'] ?? data['user']) as Map<String, dynamic>;
 
       _user = User.fromJson(photographerData);
+      _pendingEmailVerification = null;
       await _tokenStorage.saveTokens(
         accessToken: accessToken,
         refreshToken: refreshToken,
       );
       await _tokenStorage.saveUser(_user!);
 
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = ApiClient.extractErrorMessage(e);
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> verifyEmailCode(String code) async {
+    final email = _pendingEmailVerification;
+    if (email == null) return false;
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      final response = await _apiClient.post(
+        '/v1/auth/verify-email',
+        data: {'email': email, 'code': code.trim()},
+      );
+      final data = response.data as Map<String, dynamic>;
+      final accessToken = data['accessToken'] as String;
+      final refreshToken = data['refreshToken'] as String;
+      final photographerData = (data['photographer'] ?? data['user']) as Map<String, dynamic>;
+      _user = User.fromJson(photographerData);
+      await _tokenStorage.saveTokens(accessToken: accessToken, refreshToken: refreshToken);
+      await _tokenStorage.saveUser(_user!);
+      _pendingEmailVerification = null;
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = ApiClient.extractErrorMessage(e);
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> resendVerificationCode() async {
+    final email = _pendingEmailVerification;
+    if (email == null) return false;
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      await _apiClient.post('/v1/auth/resend-verification', data: {'email': email});
       _isLoading = false;
       notifyListeners();
       return true;
@@ -130,11 +182,18 @@ class AuthProvider extends ChangeNotifier {
       );
 
       final data = response.data as Map<String, dynamic>;
+      if (data['verificationRequired'] == true) {
+        _pendingEmailVerification = data['email'] as String? ?? email.trim().toLowerCase();
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
       final accessToken = data['accessToken'] as String;
       final refreshToken = data['refreshToken'] as String;
       final photographerData = (data['photographer'] ?? data['user']) as Map<String, dynamic>;
 
       _user = User.fromJson(photographerData);
+      _pendingEmailVerification = null;
       await _tokenStorage.saveTokens(
         accessToken: accessToken,
         refreshToken: refreshToken,
@@ -154,6 +213,7 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> logout() async {
     _user = null;
+    _pendingEmailVerification = null;
     _errorMessage = null;
     await _tokenStorage.clearAll();
     notifyListeners();

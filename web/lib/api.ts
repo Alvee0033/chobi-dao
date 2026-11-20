@@ -10,6 +10,7 @@ export type AuthPayload = {
     driveRootFolderId?: string | null;
   };
 };
+export type SignupResult = { verificationRequired: true; email: string };
 
 export type BillingUsage = {
   plan: "free" | "pro";
@@ -183,8 +184,16 @@ function normalizeEvent<T extends EventPayload>(event: T): T {
   return event;
 }
 
-export async function signup(email: string, password: string, name: string): Promise<AuthPayload> {
-  return json<AuthPayload>("/v1/auth/signup", { method: "POST", body: JSON.stringify({ email, password, name }) });
+export async function signup(email: string, password: string, name: string): Promise<SignupResult> {
+  return json<SignupResult>("/v1/auth/signup", { method: "POST", body: JSON.stringify({ email, password, name }) });
+}
+
+export async function verifyEmailCode(email: string, code: string): Promise<AuthPayload> {
+  return json<AuthPayload>("/v1/auth/verify-email", { method: "POST", body: JSON.stringify({ email, code }) });
+}
+
+export async function resendEmailCode(email: string): Promise<{ ok: true }> {
+  return json<{ ok: true }>("/v1/auth/resend-verification", { method: "POST", body: JSON.stringify({ email }) });
 }
 
 export async function login(email: string, password: string): Promise<AuthPayload> {

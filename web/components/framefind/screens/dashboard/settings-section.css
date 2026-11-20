@@ -1,0 +1,37 @@
+.cd-settings{width:min(100%,900px);margin:0 auto;color:#39291f}
+.cd-settings-heading{margin:0 0 25px}
+.cd-settings-heading>span,.cd-settings-label{color:#a2775e;font-size:9px;font-weight:900;letter-spacing:.16em}
+.cd-settings-heading h1{margin:8px 0 7px;font:700 clamp(36px,4vw,48px)/1 Georgia,serif;letter-spacing:-.055em;color:#30221b}
+.cd-settings-heading p{margin:0;color:#8c786a;font-size:13px;line-height:1.6}
+.cd-settings-account,.cd-settings-storage{border:1px solid #ebdfd3;border-radius:16px;background:#fffdf9;box-shadow:0 8px 28px #42271908}
+.cd-settings-account{display:flex;align-items:center;gap:16px;padding:20px;margin-bottom:14px}
+.cd-settings-avatar{display:grid;flex:none;width:52px;height:52px;place-items:center;border:1px solid #f2d7c5;border-radius:15px;background:linear-gradient(145deg,#fff2e5,#f8dfc9);color:#c75c27;font:700 24px Georgia,serif}
+.cd-settings-identity{min-width:0;flex:1}
+.cd-settings-identity h2{overflow:hidden;margin:4px 0 3px;color:#38281e;font:700 18px Georgia,serif;text-overflow:ellipsis;white-space:nowrap}
+.cd-settings-identity p{overflow:hidden;margin:0;color:#877467;font-size:12px;text-overflow:ellipsis;white-space:nowrap}
+.cd-settings-plan{display:grid;gap:7px;flex:none;padding:10px 12px;border:1px solid #ebdfd3;border-radius:11px;background:#fffaf4;color:#68432e;text-decoration:none}
+.cd-settings-plan>span{color:#bc6030;font-size:8px;font-weight:900;letter-spacing:.14em}
+.cd-settings-plan strong{display:flex;align-items:center;gap:8px;font-size:11px}
+.cd-settings-plan:hover,.cd-settings-upgrade:hover{border-color:#e5ad88;background:#fff4e9}
+.cd-settings-storage{padding:22px}
+.cd-settings-storage-top{display:flex;align-items:center;gap:12px;margin-bottom:21px}
+.cd-settings-storage-icon{display:grid;width:40px;height:40px;place-items:center;border-radius:12px;background:#fff0e3;color:#d7632b}
+.cd-settings-storage-copy{flex:1;min-width:0}
+.cd-settings-storage-copy h2{margin:4px 0 0;color:#39291f;font:700 19px Georgia,serif;letter-spacing:-.02em}
+.cd-settings-remaining{display:flex;align-items:baseline;gap:5px;color:#493326}
+.cd-settings-remaining strong{font:700 22px Georgia,serif}
+.cd-settings-remaining span,.cd-settings-loading{color:#958274;font-size:11px}
+.cd-settings-meter{height:9px;overflow:hidden;border-radius:99px;background:#f0e8df}
+.cd-settings-meter span{display:block;height:100%;min-width:0;border-radius:inherit;background:linear-gradient(90deg,#ffb65d,#e75c22);transition:width .45s ease}
+.cd-settings-storage-meta{display:flex;justify-content:space-between;gap:12px;margin-top:10px;color:#918073;font-size:11px}
+.cd-settings-storage-meta strong{color:#5c4435}
+.cd-settings-storage-note{margin:12px 0 0;color:#ae4c25;font-size:11px;font-weight:700}
+.cd-settings-upgrade{display:inline-flex;align-items:center;gap:7px;margin-top:17px;padding:9px 11px;border:1px solid #efd7c5;border-radius:9px;color:#a94d24;text-decoration:none;font-size:11px;font-weight:800;transition:background .16s,border-color .16s}
+.cd-settings-skeleton{height:9px;border-radius:99px;background:linear-gradient(90deg,#f0e8df 25%,#fbf7f1 50%,#f0e8df 75%);background-size:200% 100%;animation:cd-settings-shimmer 1.4s ease infinite}
+.cd-settings-usage-error{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px;border:1px solid #f2d3c8;border-radius:9px;background:#fff5f1;color:#93432b;font-size:12px}
+.cd-settings-usage-error button{flex:none;border:0;background:none;color:#a54b28;font-size:11px;font-weight:800;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.cd-settings-help{margin:18px 2px;color:#978476;font-size:11px}
+.cd-settings-help a{color:#bd572b;font-weight:800;text-decoration:underline;text-underline-offset:3px}
+@keyframes cd-settings-shimmer{to{background-position:-200% 0}}
+@media(max-width:560px){.cd-settings-account{gap:12px;padding:15px}.cd-settings-avatar{width:44px;height:44px;border-radius:13px;font-size:21px}.cd-settings-identity h2{font-size:16px}.cd-settings-identity p{font-size:11px}.cd-settings-plan{padding:8px}.cd-settings-plan strong{font-size:10px}.cd-settings-storage{padding:17px}.cd-settings-storage-copy h2{font-size:16px}.cd-settings-remaining strong{font-size:19px}.cd-settings-storage-meta{font-size:10px}}
+@media(prefers-reduced-motion:reduce){.cd-settings-meter span,.cd-settings-skeleton{animation:none;transition:none}}
