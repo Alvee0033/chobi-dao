@@ -42,7 +42,7 @@ const steps = [
 function Brand({ light = false }: { light?: boolean }) {
   return (
     <Link href="/" className={`cd-brand${light ? " cd-brand-light" : ""}`} aria-label="Chobi Dao home">
-      <span className="cd-brand-mark"><Icons.Camera size={21} /></span>
+      <span className="cd-brand-mark"><Image src="/logo-mark.webp" alt="" width={40} height={40} /></span>
       <span>Chobi Dao</span>
     </Link>
   );
@@ -196,7 +196,7 @@ function PlansSection() {
         <header className="cd-pricing-heading"><p className="cd-section-label">SIMPLE STUDIO PLANS</p><h2 id="plans-title">Room for every <em>memory.</em></h2><p>Start free. Move up when your galleries need more space.</p></header>
         <div className="cd-pricing-grid">
           <article className="cd-pricing-plan"><div className="cd-pricing-top"><div><span>01 / START HERE</span><h3>Free</h3><p>Everything you need to share a first gallery.</p></div><strong>৳0<small>forever</small></strong></div><ul><li><Icons.Check size={15} /> 1 GB storage</li><li><Icons.Check size={15} /> Up to 200 photos</li><li><Icons.Check size={15} /> 100 matches per month</li><li><Icons.Check size={15} /> QR event galleries</li></ul><Link href="/auth/signup" className="cd-pricing-link">Create a free account <Icons.ArrowRight size={16} /></Link></article>
-          <article className="cd-pricing-plan cd-pricing-plan-pro"><div className="cd-pricing-ribbon">MADE FOR BUSY SEASONS</div><div className="cd-pricing-top"><div><span>02 / THE STUDIO PLAN</span><h3>Pro</h3><p>More breathing room, no match limits.</p></div><strong>৳399<small>per 30 days</small></strong></div><ul><li><Icons.Check size={15} /> 20 GB storage</li><li><Icons.Check size={15} /> Unlimited photo count</li><li><Icons.Check size={15} /> Unlimited face matching</li><li><Icons.Check size={15} /> Full-resolution downloads</li></ul><Link href="/auth/signup" className="cd-pricing-link cd-pricing-link-pro">Start with a 14-day Pro trial <Icons.ArrowRight size={16} /></Link><p className="cd-pricing-note">No auto-charge. Renew manually with bKash.</p></article>
+          <article className="cd-pricing-plan cd-pricing-plan-pro"><div className="cd-pricing-ribbon">MADE FOR BUSY SEASONS</div><div className="cd-pricing-top"><div><span>02 / THE STUDIO PLAN</span><h3>Pro</h3><p>More breathing room, no match limits.</p></div><strong>৳399<small>per 30 days</small></strong></div><ul><li><Icons.Check size={15} /> 20 GB storage</li><li><Icons.Check size={15} /> Unlimited photo count</li><li><Icons.Check size={15} /> Unlimited face matching</li><li><Icons.Check size={15} /> Full-resolution downloads</li></ul><Link href="/auth/signup" className="cd-pricing-link cd-pricing-link-pro">Start with a 14-day Pro trial <Icons.ArrowRight size={16} /></Link><p className="cd-pricing-note">No auto-charge. Secure payment through UddoktaPay.</p></article>
         </div>
         <p className="cd-pricing-footnote">Every plan is built around private face matching and event galleries that open right in the browser.</p>
       </div>

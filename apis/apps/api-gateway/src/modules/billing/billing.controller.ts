@@ -57,10 +57,4 @@ export class BillingController {
     }
   }
 
-  @Get("uddoktapay/cancel")
-  async uddoktapayCancel(@Query("subscription_id") subscriptionId: string, @Res() response: any) {
-    const appUrl = parseEnv().APP_BASE_URL.replace(/\/$/, "");
-    try { await this.billing.cancelUddoktaCheckout(subscriptionId); } catch { /* Keep provider cancellation UX available even if its reference is invalid. */ }
-    return response.redirect(`${appUrl}/dashboard/billing?billing=cancelled`);
-  }
 }

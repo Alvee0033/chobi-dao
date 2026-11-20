@@ -113,23 +113,23 @@ class _LoginScreenState extends State<LoginScreen> {
                       // Brand Icon / Logo
                       Center(
                         child: Container(
-                          width: 76,
-                          height: 76,
+                          width: 82,
+                          height: 82,
                           decoration: BoxDecoration(
-                            gradient: AppColors.orangeGradient,
-                            borderRadius: BorderRadius.circular(24),
+                            color: const Color(0xFFFFF8F0),
+                            borderRadius: BorderRadius.circular(23),
                             boxShadow: [
                               BoxShadow(
-                                color: AppColors.brandOrange.withValues(alpha: 0.35),
-                                blurRadius: 20,
-                                offset: const Offset(0, 8),
+                                color: AppColors.brandOrange.withValues(alpha: 0.18),
+                                blurRadius: 18,
+                                offset: const Offset(0, 6),
                               ),
                             ],
                           ),
-                          child: const Icon(
-                            Icons.camera_alt_rounded,
-                            color: Colors.white,
-                            size: 38,
+                          child: Image.asset(
+                            'assets/brand/chobi-dao.webp',
+                            fit: BoxFit.contain,
+                            semanticLabel: 'Chobi Dao logo',
                           ),
                         ),
                       ),

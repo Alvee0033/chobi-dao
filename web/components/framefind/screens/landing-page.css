@@ -18,7 +18,8 @@ html:has(.cd-page) { scroll-behavior: smooth; scroll-padding-top: 30px; }
 .cd-header { position: absolute; inset: 0 0 auto; z-index: 20; height: 88px; }
 .cd-header-inner { height: 100%; display: flex; align-items: center; justify-content: space-between; gap: 32px; }
 .cd-brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; color: var(--cd-ink); font-size: 23px; font-weight: 600; letter-spacing: -.04em; white-space: nowrap; }
-.cd-brand-mark { display: grid; place-items: center; width: 36px; height: 36px; color: #c75d21; border: 1px solid #d6753b; border-radius: 12px; }
+.cd-brand-mark { display: grid; place-items: center; width: 40px; height: 40px; flex: none; }
+.cd-brand-mark img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .cd-nav { display: flex; gap: 32px; }
 .cd-nav a { color: #705a4a; text-decoration: none; font-size: 12px; transition: color .2s; }
 .cd-nav a:hover { color: var(--cd-orange); }
@@ -332,7 +333,7 @@ html:has(.cd-page) { scroll-behavior: smooth; scroll-padding-top: 30px; }
   .cd-container { width: calc(100% - 40px); }
   .cd-header { height: 70px; }
   .cd-brand { font-size: 21px; }
-  .cd-brand-mark { width: 32px; height: 32px; border-radius: 10px; }
+  .cd-brand-mark { width: 36px; height: 36px; }
   .cd-nav,.cd-button-nav { display: none; }
   .cd-mobile-nav { display: block; position: relative; }
   .cd-mobile-nav summary { display: grid; place-content: center; gap: 5px; width: 44px; height: 44px; border: 1px solid var(--cd-line); border-radius: 13px; cursor: pointer; list-style: none; background: #fffaf280; }

@@ -122,7 +122,7 @@ export class BillingService {
         metadata: { subscription_id: attempt.id, photographer_id: photographer.id },
         redirect_url: `${apiBase}/v1/billing/uddoktapay/callback`,
         return_type: "GET",
-        cancel_url: `${apiBase}/v1/billing/uddoktapay/cancel?subscription_id=${encodeURIComponent(attempt.id)}`,
+        cancel_url: `${appBase}/dashboard/billing?billing=cancelled`,
       });
       if (created.status !== true || !created.payment_url) throw new ServiceUnavailableException(created.message || "UddoktaPay did not create a checkout");
       const paymentUrl = new URL(created.payment_url);
@@ -165,14 +165,6 @@ export class BillingService {
     });
     if (!activated.count) return { ok: true, photographerId: attempt.photographerId };
     await this.prisma.photographer.update({ where: { id: attempt.photographerId }, data: { plan: "pro" } });
-    return { ok: true, photographerId: attempt.photographerId };
-  }
-
-  async cancelUddoktaCheckout(subscriptionId: string) {
-    if (!subscriptionId || subscriptionId.length > 64) throw new BadRequestException("Invalid subscription reference");
-    const attempt = await this.prisma.subscription.findFirst({ where: { id: subscriptionId, provider: "uddoktapay" } });
-    if (!attempt) throw new NotFoundException("Payment attempt not found");
-    if (attempt.status === "pending") await this.prisma.subscription.updateMany({ where: { id: attempt.id, status: "pending" }, data: { status: "cancelled" } });
     return { ok: true, photographerId: attempt.photographerId };
   }
 

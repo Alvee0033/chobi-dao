@@ -55,6 +55,9 @@ describe("BillingService bKash checkout", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("https://pay.example.test/api/checkout-v2");
     expect(fetchMock.mock.calls[0][1].headers["RT-UDDOKTAPAY-API-KEY"]).toBe("uddokta-test-key");
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ amount: "399.00", return_type: "GET", redirect_url: "http://localhost:3001/v1/billing/uddoktapay/callback", metadata: { subscription_id: "subscription-1", photographer_id: "photographer-1234" } });
+    const checkoutPayload = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(checkoutPayload.cancel_url).toBe("http://localhost:3000/dashboard/billing?billing=cancelled");
+    expect(checkoutPayload.cancel_url).not.toContain("subscription-1");
   });
 
   it("activates Pro only after UddoktaPay verifies amount, invoice, and attempt metadata", async () => {
