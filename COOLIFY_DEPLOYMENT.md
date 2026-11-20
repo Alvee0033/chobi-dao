@@ -41,6 +41,15 @@ JWT_ACCESS_SECRET=your_long_random_jwt_access_secret
 JWT_REFRESH_SECRET=your_long_random_jwt_refresh_secret
 LIVENESS_TOKEN_SECRET=your_long_random_liveness_secret
 SEARCH_SESSION_SECRET=your_long_random_search_session_secret
+
+# bKash checkout (sandbox is the default until production merchant credentials are configured)
+BKASH_BASE_URL=https://checkout.sandbox.bka.sh/v1.2.0-beta
+BKASH_APP_KEY=your_bkash_sandbox_app_key
+BKASH_APP_SECRET=your_bkash_sandbox_app_secret
+BKASH_USERNAME=your_bkash_sandbox_username
+BKASH_PASSWORD=your_bkash_sandbox_password
+# Optional; defaults to https://api-chobi.yourdomain.com/v1/billing/bkash/callback
+BKASH_CALLBACK_URL=
 ```
 
 ### Step 4: Routing / FQDN Setup in Coolify

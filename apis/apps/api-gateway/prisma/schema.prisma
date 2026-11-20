@@ -46,6 +46,7 @@ model Photographer {
   googleTokenExpiresAt  DateTime?      @map("google_token_expires_at") @db.Timestamptz(6)
   driveRootFolderId     String?        @map("drive_root_folder_id")
   plan                  Plan           @default(free)
+  trialEndsAt           DateTime       @default(dbgenerated("(now() + interval '14 days')")) @map("trial_ends_at") @db.Timestamptz(6)
   stripeCustomerId      String?        @map("stripe_customer_id")
   createdAt             DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt             DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -203,7 +204,13 @@ model UserRefreshToken {
 model Subscription {
   id             String   @id @default(uuid()) @db.Uuid
   photographerId String   @map("photographer_id") @db.Uuid
-  stripeSubId    String   @unique @map("stripe_sub_id")
+  stripeSubId    String?  @unique @map("stripe_sub_id")
+  provider       String   @default("bkash")
+  providerPaymentId String? @unique @map("provider_payment_id")
+  transactionId  String?  @map("transaction_id")
+  amount         Decimal? @db.Decimal(10, 2)
+  currency       String   @default("BDT")
+  currentPeriodEnd DateTime? @map("current_period_end") @db.Timestamptz(6)
   status         String
   plan           Plan
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)

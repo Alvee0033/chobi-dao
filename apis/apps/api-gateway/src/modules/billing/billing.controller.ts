@@ -1,21 +1,47 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from "@nestjs/common";
+import { Controller, Get, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
 import { BillingService } from "./billing.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { AuthRoles } from "../../common/auth/auth-role.decorator";
+import { parseEnv } from "../../config/env";
 
 @Controller("v1/billing")
-@AuthRoles("photographer")
 export class BillingController {
   constructor(private readonly billing: BillingService) {}
 
   @Get("usage")
   @UseGuards(JwtAuthGuard)
+  @AuthRoles("photographer")
   usage(@Req() req: { user: { id: string } }) {
     return this.billing.usage(req.user.id);
   }
 
-  @Post("webhook")
-  webhook(@Body() payload: unknown) {
-    return this.billing.webhook(payload);
+  @Get("payments")
+  @UseGuards(JwtAuthGuard)
+  @AuthRoles("photographer")
+  payments(@Req() req: { user: { id: string } }) {
+    return this.billing.history(req.user.id);
+  }
+
+  @Post("checkout")
+  @UseGuards(JwtAuthGuard)
+  @AuthRoles("photographer")
+  checkout(@Req() req: { user: { id: string } }) {
+    return this.billing.startCheckout(req.user.id);
+  }
+
+  @Get("bkash/callback")
+  async bkashCallback(
+    @Query("paymentID") paymentId: string,
+    @Query("status") status: string,
+    @Res() response: any,
+  ) {
+    const appUrl = parseEnv().APP_BASE_URL.replace(/\/$/, "");
+    try {
+      const result = await this.billing.completeCheckout(paymentId, status);
+      const state = result.ok ? "success" : status === "cancel" ? "cancelled" : "failed";
+      return response.redirect(`${appUrl}/dashboard/settings?billing=${state}`);
+    } catch {
+      return response.redirect(`${appUrl}/dashboard/settings?billing=failed`);
+    }
   }
 }

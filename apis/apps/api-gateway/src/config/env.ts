@@ -14,6 +14,12 @@ export const envSchema = z.object({
   GOOGLE_REDIRECT_URI: z.string().default("http://localhost:3001/v1/auth/google/callback"),
   // Billing
   STRIPE_SECRET_KEY: z.string().default("sk_test_mock"),
+  BKASH_BASE_URL: z.string().url().default("https://checkout.sandbox.bka.sh/v1.2.0-beta"),
+  BKASH_APP_KEY: z.string().default(""),
+  BKASH_APP_SECRET: z.string().default(""),
+  BKASH_USERNAME: z.string().default(""),
+  BKASH_PASSWORD: z.string().default(""),
+  BKASH_CALLBACK_URL: z.preprocess((value) => value === "" ? undefined : value, z.string().url().optional()),
   APP_BASE_URL: z.string().default("http://localhost:3000"),
   API_BASE_URL: z.string().default("http://localhost:3001"),
   // AI Service (InsightFace self-hosted)

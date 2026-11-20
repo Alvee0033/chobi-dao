@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, HttpException, HttpStatus, Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
 import { PrismaService } from "../../common/services/prisma.service";
 import { ObjectStorageService } from "../../common/services/storage.service";
 import { Queue } from "bullmq";
@@ -53,6 +53,20 @@ export class SearchService {
 
     const event = await this.prisma.event.findUnique({ where: { slug } });
     if (!event || event.deletedAt) throw new NotFoundException("Event not found");
+
+    const photographer = await this.prisma.photographer.findUnique({ where: { id: event.photographerId }, select: { trialEndsAt: true } });
+    const subscription = await this.prisma.subscription.findFirst({
+      where: { photographerId: event.photographerId, status: "succeeded", currentPeriodEnd: { gt: new Date() } }, select: { id: true },
+    });
+    if (!subscription && (!photographer || photographer.trialEndsAt <= new Date())) {
+      const monthStart = new Date();
+      monthStart.setUTCDate(1);
+      monthStart.setUTCHours(0, 0, 0, 0);
+      const matchesUsed = await this.prisma.scanEvent.count({
+        where: { event: { photographerId: event.photographerId }, result: "success", createdAt: { gte: monthStart } },
+      });
+      if (matchesUsed >= 100) throw new HttpException("This event has reached the free plan's monthly match limit.", HttpStatus.PAYMENT_REQUIRED);
+    }
 
     if (!Array.isArray(images) || images.length < 1 || images.length > 3) {
       await this.prisma.scanEvent.create({ data: { eventId: event.id, result: "error", matchCount: 0 } });

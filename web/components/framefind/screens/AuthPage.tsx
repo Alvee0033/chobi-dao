@@ -78,6 +78,7 @@ export function AuthPage({ setView, showToast, onAuth, initialMode = "login", on
         <button className="studio-auth-back" type="button" onClick={() => setView("landing")}><Icons.ChevronLeft size={16} /> Back to site</button>
         <div className="studio-auth-form-wrap">
           <div className="studio-auth-form-heading"><span className="studio-auth-overline">Your creative workspace</span><h2>{mode === "login" ? "Welcome back." : "Start something beautiful."}</h2><p>{mode === "login" ? "Sign in to manage your events and galleries." : "Create your photographer account to begin."}</p></div>
+          {mode === "signup" && <div className="studio-auth-trial"><Icons.Sparkles size={15} /><span>14 days of Pro included · no auto-charge</span></div>}
           <div className="studio-auth-tabs" role="tablist" aria-label="Account access"><button role="tab" aria-selected={mode === "login"} type="button" onClick={() => changeMode("login")}>Sign in</button><button role="tab" aria-selected={mode === "signup"} type="button" onClick={() => changeMode("signup")}>Create account</button></div>
           <form onSubmit={submit} data-testid="auth-form" className="studio-auth-form">
             {mode === "signup" && <div className="studio-auth-field"><label htmlFor="studio-name">Full name</label><input id="studio-name" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Your name" required /></div>}

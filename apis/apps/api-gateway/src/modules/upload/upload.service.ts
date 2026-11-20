@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, HttpException, HttpStatus, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../../common/services/prisma.service";
 import { ObjectStorageService } from "../../common/services/storage.service";
 import type { MultipartCompleteRequestDto, MultipartPresignPartsRequestDto, MultipartUploadInitRequestDto, UploadUrlRequestDto } from "@framefind/shared-contracts";
@@ -7,6 +7,8 @@ import { randomUUID } from "crypto";
 import jwt from "jsonwebtoken";
 import { parseEnv } from "../../config/env";
 import { Queue } from "bullmq";
+
+const FREE_STORAGE_BYTES = 1024 ** 3;
 
 @Injectable()
 export class UploadService {
@@ -52,6 +54,27 @@ export class UploadService {
   async createUploadUrl(photographerId: string, eventId: string, dto: UploadUrlRequestDto, apiBase: string, authHeader?: string) {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event || event.photographerId !== photographerId || event.deletedAt) throw new NotFoundException("Event not found");
+
+    const photographer = await this.prisma.photographer.findUnique({ where: { id: photographerId }, select: { plan: true, trialEndsAt: true } });
+    if (!photographer) throw new NotFoundException("Photographer not found");
+    const paidSubscription = await this.prisma.subscription.findFirst({
+      where: { photographerId, status: "succeeded", currentPeriodEnd: { gt: new Date() } }, select: { id: true },
+    });
+    const pro = Boolean(paidSubscription) || photographer.trialEndsAt > new Date();
+    if (!pro) {
+      const [usage, photoCount] = await Promise.all([
+        this.prisma.photo.aggregate({ where: { event: { photographerId } }, _sum: { fileSizeBytes: true } }),
+        this.prisma.photo.count({ where: { event: { photographerId } } }),
+      ]);
+      if (photoCount >= 200 || Number(usage._sum.fileSizeBytes || 0n) + dto.fileSizeBytes > FREE_STORAGE_BYTES) {
+        throw new HttpException("Free plan limit reached. Upgrade to Chobi Dao Pro to continue uploading.", HttpStatus.PAYMENT_REQUIRED);
+      }
+    } else {
+      const usage = await this.prisma.photo.aggregate({ where: { event: { photographerId } }, _sum: { fileSizeBytes: true } });
+      if (Number(usage._sum.fileSizeBytes || 0n) + dto.fileSizeBytes > 20 * FREE_STORAGE_BYTES) {
+        throw new HttpException("Your 20 GB storage limit has been reached.", HttpStatus.PAYMENT_REQUIRED);
+      }
+    }
 
     const photoId = randomUUID();
     const uploadUrl = `${apiBase}/v1/events/${encodeURIComponent(eventId)}/photos/${encodeURIComponent(photoId)}/upload-direct`;

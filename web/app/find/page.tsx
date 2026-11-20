@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { BackgroundBlobs } from "@/components/framefind/ui/BackgroundBlobs";
 import { Toast } from "@/components/framefind/ui/Toast";
 import { GuestStartPage } from "@/components/framefind/screens/GuestStartPage";
 
@@ -10,7 +9,6 @@ export default function FindPage() {
 
   return (
     <div className="min-h-screen relative font-sans selection:bg-orange-200 selection:text-orange-900">
-      <BackgroundBlobs />
       <GuestStartPage showToast={setToastMsg} />
       <Toast message={toastMsg} onClose={() => setToastMsg("")} />
     </div>

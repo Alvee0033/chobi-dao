@@ -1,7 +1,7 @@
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import { useEffect, useRef, useState } from "react";
-import { createEvent, createEventCoverUploadUrl, createUploadUrl, disconnectGoogleDrive, finalizeUpload, getApiBaseUrl, getEventQr, getEvents, getGoogleConnectUrl, refreshToken, updateEvent, deleteEvent, getPhotographerAnalytics, type EventPayload, type PhotographerAnalytics } from "@/lib/api";
+import { createEvent, createEventCoverUploadUrl, createUploadUrl, disconnectGoogleDrive, finalizeUpload, getApiBaseUrl, getEventQr, getEvents, getGoogleConnectUrl, refreshToken, updateEvent, deleteEvent, getPhotographerAnalytics, getBillingUsage, type BillingUsage, type EventPayload, type PhotographerAnalytics } from "@/lib/api";
 import { usePathname, useRouter } from "next/navigation";
 import { Icons } from "../icons";
 import type { DashboardAuthState, ShowToast, ViewSetter } from "../types";
@@ -18,15 +18,17 @@ const EventDetailView = dynamic(() => import("./dashboard/EventDetailView").then
 const PhotoGalleryView = dynamic(() => import("./dashboard/PhotoGalleryView").then((module) => module.PhotoGalleryView), { loading: DashboardViewLoading });
 const AnalyticsSection = dynamic(() => import("./dashboard/AnalyticsSection").then((module) => module.AnalyticsSection), { loading: DashboardViewLoading });
 const SettingsSection = dynamic(() => import("./dashboard/SettingsSection").then((module) => module.SettingsSection), { loading: DashboardViewLoading });
+const BillingSection = dynamic(() => import("./dashboard/BillingSection").then((module) => module.BillingSection), { loading: DashboardViewLoading });
 const QrBannerModal = dynamic(() => import("./dashboard/DashboardPrint").then((module) => module.QrBannerModal));
 const PrintableAccessCard = dynamic(() => import("./dashboard/DashboardPrint").then((module) => module.PrintableAccessCard));
 
-type TabId = "events" | "analytics" | "settings";
+type TabId = "events" | "analytics" | "settings" | "billing";
 
 
 function parseDashboardPath(pathname: string): { tab: TabId; eventId: string | null; gallery: boolean; showNew: boolean } {
   if (pathname.startsWith("/dashboard/analytics")) return { tab: "analytics", eventId: null, gallery: false, showNew: false };
   if (pathname.startsWith("/dashboard/settings")) return { tab: "settings", eventId: null, gallery: false, showNew: false };
+  if (pathname.startsWith("/dashboard/billing")) return { tab: "billing", eventId: null, gallery: false, showNew: false };
   if (pathname.startsWith("/dashboard/events/new")) return { tab: "events", eventId: null, gallery: false, showNew: true };
   const eventPhotosMatch = pathname.match(/^\/dashboard\/events\/([^/]+)\/(photos|upload)$/);
   if (eventPhotosMatch) return { tab: "events", eventId: decodeURIComponent(eventPhotosMatch[1]), gallery: true, showNew: false };
@@ -110,6 +112,7 @@ export function DashboardPage({ setView, showToast, auth, onAuth }: { setView: V
   const [loading, setLoading] = useState(false);
   const [analyticsData, setAnalyticsData] = useState<PhotographerAnalytics | null>(null);
   const [isLoadingAnalytics, setIsLoadingAnalytics] = useState<boolean>(false);
+  const [billingUsage, setBillingUsage] = useState<BillingUsage | null>(null);
   const [showQrBannerModal, setShowQrBannerModal] = useState<boolean>(false);
   const [events, setEvents] = useState<EventPayload[]>([]);
   const [eventName, setEventName] = useState("");
@@ -294,9 +297,14 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
     }
   }, [auth, activeTab]);
 
+  useEffect(() => {
+    if (auth) withRefresh((token) => getBillingUsage(token)).then(setBillingUsage).catch(() => setBillingUsage(null));
+  }, [auth]);
+
   const handleTabChange = (tab: TabId) => {
     if (tab === "analytics") router.push("/dashboard/analytics");
     else if (tab === "settings") router.push("/dashboard/settings");
+    else if (tab === "billing") router.push("/dashboard/billing");
     else router.push("/dashboard");
     setMobileMenuOpen(false);
   };
@@ -665,7 +673,8 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
         {[
           { id: "events" as TabId, label: "Events", Icon: Icons.Camera },
           { id: "analytics" as TabId, label: "Analytics", Icon: Icons.BarChart },
-          { id: "settings" as TabId, label: "Settings", Icon: Icons.Settings }
+          { id: "settings" as TabId, label: "Settings", Icon: Icons.Settings },
+          { id: "billing" as TabId, label: "Billing", Icon: Icons.Lock }
         ].map((tab) => {
           const isActive = activeTab === tab.id;
           return (
@@ -720,6 +729,7 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
         <nav className="flex flex-col gap-2 flex-1 px-1">
           <NavItem id="events" Icon={Icons.Camera} label="Events" activeTab={activeTab} setActiveTab={handleTabChange} />
           <NavItem id="analytics" Icon={Icons.BarChart} label="Analytics" activeTab={activeTab} setActiveTab={handleTabChange} />
+          <NavItem id="billing" Icon={Icons.Lock} label="Plan & billing" activeTab={activeTab} setActiveTab={handleTabChange} />
           <NavItem id="settings" Icon={Icons.Settings} label="Settings" activeTab={activeTab} setActiveTab={handleTabChange} />
         </nav>
 
@@ -751,6 +761,14 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
       <main className={`studio-dashboard-main flex-1 px-4 py-6 md:p-8 lg:p-12 pt-20 lg:pt-12 overflow-y-auto transition-all ${
         selectedEventId ? "pb-12" : "pb-24 lg:pb-12"
       }`}>
+        {!selectedEventId && activeTab !== "billing" && billingUsage && (
+          <div className="cd-dashboard-trial-banner">
+            <span className="cd-dashboard-trial-mark"><Icons.Sparkles size={18} /></span>
+            <div><strong>{billingUsage.trialDaysRemaining ? `Your Pro trial · ${billingUsage.trialDaysRemaining} days left` : billingUsage.plan === "pro" ? "You’re on Chobi Dao Pro" : "You’re on the Free plan"}</strong><span>{billingUsage.trialDaysRemaining ? "Enjoy 20 GB storage and unlimited matching while it lasts." : billingUsage.plan === "pro" ? `Your current plan ends ${billingUsage.currentPeriodEnd ? new Date(billingUsage.currentPeriodEnd).toLocaleDateString() : "soon"}.` : "Upgrade for 20 GB storage and unlimited face matching."}</span></div>
+            <button onClick={() => handleTabChange("billing")}>{billingUsage.plan === "pro" && !billingUsage.trialDaysRemaining ? "View billing" : "Upgrade · ৳399"}<Icons.ArrowRight size={16} /></button>
+          </div>
+        )}
+        {!selectedEventId && activeTab === "billing" ? <BillingSection auth={auth} showToast={showToast} /> : null}
         {selectedEventId ? (
           isViewingGallery ? (
             <PhotoGalleryView
@@ -787,7 +805,7 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
               onOpenGallery={() => router.push(`/dashboard/events/${encodeURIComponent(selectedEventId)}/photos`)}
             />
           )
-        ) : (
+        ) : activeTab === "billing" ? null : (
           <div className="max-w-5xl mx-auto">
             {/* Floating Action Button */}
             {activeTab === "events" && (

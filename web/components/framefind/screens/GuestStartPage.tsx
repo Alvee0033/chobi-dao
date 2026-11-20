@@ -2,8 +2,9 @@ import { FormEvent, useState, useEffect } from "react";
 import { getPublicEvent } from "@/lib/api";
 import { Icons } from "../icons";
 import type { ShowToast } from "../types";
-import { ClayCard } from "../ui/ClayCard";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import "./find-page.css";
 
 export function GuestStartPage({ showToast }: { showToast: ShowToast }) {
   const [code, setCode] = useState("");
@@ -57,67 +58,17 @@ export function GuestStartPage({ showToast }: { showToast: ShowToast }) {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 relative z-10 selection:bg-orange-200">
-      <button 
-        onClick={() => router.push("/")} 
-        className="absolute top-6 left-6 flex items-center gap-3 text-orange-600 font-heading font-black text-2xl hover:scale-105 transition-all drop-shadow-sm"
-      >
-        <img src="/logo-mark.webp" alt="Chobi Dao" className="w-9 h-9 object-contain" />
-        <span>Chobi dao</span>
-      </button>
-
-      <ClayCard className="w-full max-w-md text-center flex flex-col items-center p-8 bg-white/70 backdrop-blur-2xl rounded-3xl border border-orange-100/80 shadow-2xl">
-        <div className="w-16 h-16 rounded-[24px] bg-gradient-to-tr from-orange-500 to-amber-400 text-white flex items-center justify-center mb-6 shadow-xl shadow-orange-500/25">
-          <Icons.QrCode size={28} className="stroke-[2.5]" />
-        </div>
-        
-        <h2 className="text-2xl sm:text-3xl font-black font-heading text-charcoal mb-2 tracking-tight">Access Your Event</h2>
-        <p className="text-xs sm:text-sm text-muted font-bold mb-6 px-2 leading-relaxed">
-          Enter the event code or link shared by your photographer to instantly find your photos.
-        </p>
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4 w-full" data-testid="guest-start-form">
-          <div className="relative group w-full">
-            <input
-              type="text"
-              placeholder="e.g. wedding-party"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              autoFocus
-              className="w-full bg-orange-50/30 border-2 border-orange-200/60 hover:border-orange-300 focus:border-orange-500 px-5 py-4 rounded-2xl text-center font-black text-lg text-charcoal placeholder:text-muted/40 focus:outline-none focus:bg-white transition-all shadow-inner tracking-wider"
-              data-testid="guest-slug-input"
-            />
-          </div>
-          <button 
-            type="submit" 
-            className="w-full h-14 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-2xl font-black text-sm transition-all shadow-lg shadow-orange-500/25 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2" 
-            disabled={loading}
-          >
-            {loading ? <Icons.Loader size={18} /> : <Icons.FaceId size={20} />}
-            <span>{loading ? "Verifying Event..." : "Continue to Face Scan"}</span>
-          </button>
-        </form>
-
-        {recentSlugs.length > 0 && (
-          <div className="mt-6 pt-5 border-t border-orange-100/80 w-full text-left">
-            <span className="text-[10px] uppercase font-black tracking-widest text-muted/80 block mb-2">Recent Events:</span>
-            <div className="flex flex-wrap gap-2">
-              {recentSlugs.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => {
-                    setCode(s);
-                    handleAccess(s);
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100/80 text-orange-600 border border-orange-200/50 text-xs font-bold transition-all active:scale-95"
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </ClayCard>
-    </div>
+    <main className="ff-find-page">
+      <header className="ff-find-header"><button onClick={() => router.push("/")} className="ff-find-brand" aria-label="Chobi Dao home"><img src="/logo-mark.webp" alt="" /> Chobi Dao</button><Link href="/auth" className="ff-find-for-studio">Photographer login <Icons.ArrowRight size={14} /></Link></header>
+      <section className="ff-find-center" aria-labelledby="find-title">
+        <span className="ff-find-eyebrow"><i /> YOUR EVENT, YOUR MOMENTS</span>
+        <h1 id="find-title">Find your <em>photos.</em></h1>
+        <p>Enter the event code from your photographer to find the photos you’re in.</p>
+        <form onSubmit={handleSubmit} className="ff-find-form" data-testid="guest-start-form"><label htmlFor="event-code">EVENT CODE OR LINK</label><div className="ff-find-field"><Icons.QrCode size={20} /><input id="event-code" type="text" placeholder="e.g. wedding-party" value={code} onChange={(e) => setCode(e.target.value)} autoFocus data-testid="guest-slug-input" /></div><button type="submit" disabled={loading}>{loading ? <><Icons.Loader size={17} /> Finding your event…</> : <>Continue <Icons.ArrowRight size={17} /></>}</button><span className="ff-find-private"><Icons.Lock size={13} /> Private matching. No app needed.</span></form>
+        {recentSlugs.length > 0 && <div className="ff-find-recent"><span>RECENT EVENTS</span><div>{recentSlugs.map((s) => <button key={s} onClick={() => { setCode(s); handleAccess(s); }}>{s}<Icons.ArrowRight size={12} /></button>)}</div></div>}
+        <div className="ff-find-steps"><span><i>01</i> Enter code</span><b>·</b><span><i>02</i> Take a selfie</span><b>·</b><span><i>03</i> See your photos</span></div>
+      </section>
+      <footer className="ff-find-footer"><span>CHOBI DAO</span><span>MADE FOR THE MOMENTS THAT MATTER</span></footer>
+    </main>
   );
 }

@@ -10,6 +10,22 @@ export type AuthPayload = {
     driveRootFolderId?: string | null;
   };
 };
+
+export type BillingUsage = {
+  plan: "free" | "pro";
+  trialEndsAt: string;
+  trialDaysRemaining: number;
+  photosUsed: number;
+  photosLimit: number | null;
+  storageUsedBytes: number;
+  storageLimitBytes: number;
+  matchesUsed: number;
+  matchesLimit: number | null;
+  currentPeriodEnd: string | null;
+  lastTransactionId: string | null;
+  monthlyPrice: string | null;
+};
+export type BillingPayment = { id: string; status: string; amount: string | null; currency: string; transactionId: string | null; currentPeriodEnd: string | null; createdAt: string };
 export type AuthUser = {
   id: string;
   email: string;
@@ -393,6 +409,18 @@ export async function getPhotographerAnalytics(token: string): Promise<Photograp
     method: "GET",
     headers: { Authorization: `Bearer ${token}` }
   });
+}
+
+export function getBillingUsage(token: string): Promise<BillingUsage> {
+  return json<BillingUsage>("/v1/billing/usage", { headers: { Authorization: `Bearer ${token}` } });
+}
+
+export function getBillingPayments(token: string): Promise<{ payments: BillingPayment[] }> {
+  return json<{ payments: BillingPayment[] }>("/v1/billing/payments", { headers: { Authorization: `Bearer ${token}` } });
+}
+
+export function startBillingCheckout(token: string): Promise<{ checkoutUrl: string; paymentId: string }> {
+  return json<{ checkoutUrl: string; paymentId: string }>("/v1/billing/checkout", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
 }
 
 export async function getPublicPersonPhotos(slug: string, personId: string): Promise<SearchPhoto[]> {
