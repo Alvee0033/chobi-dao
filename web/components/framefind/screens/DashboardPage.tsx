@@ -593,6 +593,9 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
 
   const activeEvent = selectedEventId ? events.find((e) => e.id === selectedEventId) : null;
   const subpageTitle = isViewingGallery ? "Photo Gallery" : (activeEvent?.name || "Event Details");
+  const filteredEvents = events
+    .filter((event) => event.name.toLowerCase().includes(searchQuery.toLowerCase()) || event.location?.toLowerCase().includes(searchQuery.toLowerCase()))
+    .filter((event) => filterStatus === "all" || event.status === filterStatus);
 
   return (
     <div className="studio-dashboard min-h-screen flex bg-[#faf9f6] w-full relative z-10 font-sans" data-testid="dashboard-page">
@@ -801,12 +804,12 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
             />
           )
         ) : activeTab === "billing" ? null : (
-          <div className="max-w-5xl mx-auto">
+          <div className="max-w-5xl mx-auto studio-events-workspace">
             {activeTab === "events" ? (
               <div className="space-y-6">
                 <div className="studio-page-title"><div><p>YOUR STUDIO · WORKSPACE</p><h1>Events <span>{events.length}</span></h1><small>Your celebrations, beautifully organized.</small></div><button type="button" className="studio-create-event" onClick={handleOpenNewEvent}><Icons.Plus size={17} /> Create event</button></div>
                 {/* KPIs - Compact & Side-by-Side */}
-                <div className="grid grid-cols-2 lg:grid-cols-2 gap-3">
+                  <div className="studio-events-kpis grid grid-cols-2 gap-3">
                   <ClayCard className="studio-kpi flex items-center gap-3 p-3 group hover:scale-[1.02] transition-all bg-white border-orange-100 shadow-clay-card relative overflow-hidden min-h-[80px]">
                     <div className="w-10 h-10 rounded-xl bg-orange-500 flex items-center justify-center text-white shadow-clay-pressed border-2 border-white group-hover:rotate-6 transition-transform relative z-10 flex-shrink-0">
                       <Icons.Camera size={18} />
@@ -832,12 +835,13 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
                 <div className="space-y-4">
 
                   {/* Search & Filters - Compact & Aligned */}
-                  <div className="studio-search-bar flex flex-row gap-2 items-center p-1.5 bg-white rounded-2xl shadow-sm border border-orange-100/50">
+                  <div className="studio-search-bar flex flex-row gap-2 items-center p-1.5 bg-white rounded-2xl shadow-sm border border-orange-100/50" role="search">
                      <div className="relative flex-1">
                         <Icons.Search className="absolute left-3 top-1/2 -translate-y-1/2 text-orange-400 w-3.5 h-3.5" />
                         <input 
                            type="text" 
-                           placeholder="Search..." 
+                           placeholder="Search events by name or location"
+                           aria-label="Search events by name or location"
                            value={searchQuery}
                            onChange={(e) => setSearchQuery(e.target.value)}
                            className="w-full h-10 bg-orange-50/30 border-0 pl-9 pr-4 rounded-xl font-bold text-xs focus:ring-0 placeholder:text-muted/50 transition-all"
@@ -851,7 +855,7 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
                         >
                            <option value="all">ALL</option>
                            <option value="live">LIVE</option>
-                           <option value="processing">PROC.</option>
+                           <option value="processing">PROCESSING</option>
                         </select>
                         <button
                           onClick={() => {
@@ -884,12 +888,11 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
                       Create Event Now
                     </ClayButton>
                   </ClayCard>
+                ) : filteredEvents.length === 0 ? (
+                  <div className="studio-events-no-results"><Icons.Search size={22} /><strong>No events match those filters</strong><span>Try a different search or status.</span><button type="button" onClick={() => { setSearchQuery(""); setFilterStatus("all"); }}>Clear filters</button></div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4" data-testid="events-list">
-                    {events
-                      .filter(e => e.name.toLowerCase().includes(searchQuery.toLowerCase()) || e.location?.toLowerCase().includes(searchQuery.toLowerCase()))
-                      .filter(e => filterStatus === "all" || e.status === filterStatus)
-                      .map((event) => (
+                  <div className="studio-events-grid grid grid-cols-1 md:grid-cols-2 gap-4" data-testid="events-list">
+                    {filteredEvents.map((event) => (
                       <EventCard 
                         key={event.id} 
                         event={event} 
@@ -904,7 +907,7 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
           ) : activeTab === "analytics" ? (
             <AnalyticsSection analyticsData={analyticsData} isLoadingAnalytics={isLoadingAnalytics} />
           ) : (
-            <SettingsSection auth={auth!} />
+            <SettingsSection auth={auth!} onAuth={onAuth} />
           )}
         </div>
       )}

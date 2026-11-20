@@ -16,9 +16,10 @@ function SectionLoading() {
   return <div className="cd-section-loading" role="status"><Icons.Loader size={20} /> Loading your workspace…</div>;
 }
 
-export function DashboardSectionRoute({ section, auth, onLogout, showToast }: {
+export function DashboardSectionRoute({ section, auth, onAuth, onLogout, showToast }: {
   section: Exclude<WorkspaceSection, "events">;
   auth: DashboardAuthState;
+  onAuth: (state: DashboardAuthState | null) => void;
   onLogout: () => void;
   showToast: ShowToast;
 }) {
@@ -39,7 +40,7 @@ export function DashboardSectionRoute({ section, auth, onLogout, showToast }: {
     <div className="cd-route-transition" key={section}>
       {section === "analytics" ? <AnalyticsSection analyticsData={analytics} isLoadingAnalytics={analyticsLoading} /> : null}
       {section === "billing" ? <BillingSection auth={auth} showToast={showToast} /> : null}
-      {section === "settings" ? <SettingsSection auth={auth} /> : null}
+      {section === "settings" ? <SettingsSection auth={auth} onAuth={onAuth} /> : null}
     </div>
   </DashboardWorkspaceShell>;
 }

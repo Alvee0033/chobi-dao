@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, UnauthorizedException, BadRequestException, HttpException, HttpStatus } from "@nestjs/common";
+import { ConflictException, Injectable, UnauthorizedException, BadRequestException, HttpException, HttpStatus, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../../common/services/prisma.service";
 import { GoogleDriveStorageService } from "../../common/services/storage.service";
 import { AuthEmailService } from "./auth-email.service";
@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
 import { google } from "googleapis";
+import sharp from "sharp";
 import { parseEnv } from "../../config/env";
 import type { AuthActorType, LoginDto, SignupDto } from "@framefind/shared-contracts";
 
@@ -153,6 +154,121 @@ export class AuthService {
     });
     if (updated.count === 1) await this.authEmail.sendVerificationCode(email, photographer.name, code);
     return { ok: true as const };
+  }
+
+  async updateProfile(id: string, role: AccessRole, nameInput?: string) {
+    if (role !== "photographer") throw new UnauthorizedException("Photographer account required");
+    const name = typeof nameInput === "string" ? nameInput.trim() : "";
+    if (!name || name.length > 80) throw new BadRequestException("Name must be between 1 and 80 characters.");
+    const photographer = await this.prisma.photographer.update({ where: { id }, data: { name }, select: { id: true, email: true, name: true } });
+    return { photographer };
+  }
+
+  async updateNotifications(id: string, role: AccessRole, input: Record<string, unknown>) {
+    if (role !== "photographer") throw new UnauthorizedException("Photographer account required");
+    const preferences = {
+      eventUpdates: input.eventUpdates === true,
+      weeklySummary: input.weeklySummary === true,
+      productNews: input.productNews === true,
+    };
+    await this.prisma.photographer.update({ where: { id }, data: { notificationPreferences: preferences } });
+    return { preferences };
+  }
+
+  async getNotifications(id: string, role: AccessRole) {
+    if (role !== "photographer") throw new UnauthorizedException("Photographer account required");
+    const account = await this.prisma.photographer.findUnique({ where: { id }, select: { notificationPreferences: true } });
+    if (!account) throw new NotFoundException("Account not found");
+    const saved = account.notificationPreferences as Record<string, unknown>;
+    return { preferences: {
+      eventUpdates: saved?.eventUpdates !== false,
+      weeklySummary: saved?.weeklySummary === true,
+      productNews: saved?.productNews === true,
+    } };
+  }
+
+  async uploadAvatar(id: string, role: AccessRole, image: string) {
+    if (role !== "photographer") throw new UnauthorizedException("Photographer account required");
+    const encoded = image.replace(/^data:image\/(?:png|jpeg|webp);base64,/, "");
+    if (!encoded || encoded.length > 5_600_000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) {
+      throw new BadRequestException("Choose an image smaller than 4 MB.");
+    }
+    const source = Buffer.from(encoded, "base64");
+    if (source.length > 4 * 1024 * 1024) throw new BadRequestException("Choose an image smaller than 4 MB.");
+    let optimized: Buffer;
+    try {
+      optimized = await sharp(source, { limitInputPixels: 20_000_000 }).rotate().resize(512, 512, { fit: "cover" }).webp({ quality: 82 }).toBuffer();
+    } catch {
+      throw new BadRequestException("That image could not be opened. Try a JPG, PNG, or WebP image.");
+    }
+    const key = `profiles/${id}/avatar-${Date.now()}.webp`;
+    const account = await this.prisma.photographer.findUnique({ where: { id }, select: { avatarKey: true } });
+    if (!account) throw new NotFoundException("Account not found");
+    await this.driveStorage.putBuffer(key, optimized, "image/webp");
+    await this.prisma.photographer.update({ where: { id }, data: { avatarKey: key } });
+    if (account.avatarKey) await this.driveStorage.deleteFile(account.avatarKey).catch(() => undefined);
+    return { ok: true };
+  }
+
+  async getAvatar(id: string, role: AccessRole) {
+    if (role !== "photographer") throw new UnauthorizedException("Photographer account required");
+    const account = await this.prisma.photographer.findUnique({ where: { id }, select: { avatarKey: true } });
+    if (!account?.avatarKey) throw new NotFoundException("Profile photo not found");
+    return this.driveStorage.getFileStream(account.avatarKey);
+  }
+
+  async changePassword(id: string, role: AccessRole, currentPassword: string, newPassword: string) {
+    if (role !== "photographer") throw new UnauthorizedException("Photographer account required");
+    if (newPassword.length < 10 || newPassword.length > 128) throw new BadRequestException("Use a password between 10 and 128 characters.");
+    const account = await this.prisma.photographer.findUnique({ where: { id }, select: { passwordHash: true } });
+    if (!account?.passwordHash || !await bcrypt.compare(currentPassword, account.passwordHash)) throw new UnauthorizedException("Current password is incorrect.");
+    await this.prisma.photographer.update({ where: { id }, data: { passwordHash: await bcrypt.hash(newPassword, 12) } });
+    await this.prisma.refreshToken.deleteMany({ where: { photographerId: id } });
+    return { ok: true, signInAgain: true };
+  }
+
+  async requestEmailChange(id: string, role: AccessRole, emailInput: string, currentPassword: string) {
+    if (role !== "photographer") throw new UnauthorizedException("Photographer account required");
+    const email = emailInput.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) throw new BadRequestException("Enter a valid email address.");
+    const account = await this.prisma.photographer.findUnique({ where: { id } });
+    if (!account?.passwordHash || !await bcrypt.compare(currentPassword, account.passwordHash)) throw new UnauthorizedException("Current password is incorrect.");
+    if (email === account.email) throw new BadRequestException("That is already your current email.");
+    if (await this.prisma.photographer.findUnique({ where: { email } })) throw new ConflictException("That email is already in use.");
+    this.authEmail.assertConfigured();
+    const now = new Date();
+    if (account.emailChangeSentAt && now.getTime() - account.emailChangeSentAt.getTime() < 60_000) throw new HttpException("Wait a minute before requesting another code.", HttpStatus.TOO_MANY_REQUESTS);
+    const code = this.createVerificationCode();
+    await this.prisma.photographer.update({ where: { id }, data: {
+      pendingEmail: email,
+      emailChangeCodeHash: this.hashVerificationCode(email, code),
+      emailChangeExpiresAt: new Date(now.getTime() + 10 * 60_000),
+      emailChangeSentAt: now,
+      emailChangeAttempts: 0,
+    } });
+    await this.authEmail.sendVerificationCode(email, account.name, code, "email-change");
+    return { ok: true, email };
+  }
+
+  async verifyEmailChange(id: string, role: AccessRole, codeInput: string) {
+    if (role !== "photographer") throw new UnauthorizedException("Photographer account required");
+    const code = codeInput.trim();
+    if (!/^\d{6}$/.test(code)) throw new BadRequestException("Enter the 6-digit code from your email.");
+    const account = await this.prisma.photographer.findUnique({ where: { id } });
+    if (!account?.pendingEmail || !account.emailChangeCodeHash || !account.emailChangeExpiresAt ||
+        account.emailChangeExpiresAt <= new Date() || account.emailChangeAttempts >= 5) {
+      throw new UnauthorizedException("That code is invalid or expired. Request a new one and try again.");
+    }
+    if (!this.constantTimeCodeMatch(account.pendingEmail, code, account.emailChangeCodeHash)) {
+      await this.prisma.photographer.update({ where: { id }, data: { emailChangeAttempts: { increment: 1 } } });
+      throw new UnauthorizedException("That code is invalid or expired. Request a new one and try again.");
+    }
+    await this.prisma.photographer.update({ where: { id }, data: {
+      email: account.pendingEmail, emailVerified: true, pendingEmail: null, emailChangeCodeHash: null,
+      emailChangeExpiresAt: null, emailChangeSentAt: null, emailChangeAttempts: 0,
+    } });
+    await this.prisma.refreshToken.deleteMany({ where: { photographerId: id } });
+    return { ok: true, signInAgain: true };
   }
 
   private createVerificationCode() { return randomInt(100_000, 1_000_000).toString(); }
@@ -398,6 +514,8 @@ export class AuthService {
         email: photographer.email,
         name: photographer.name,
         plan: photographer.plan,
+        notificationPreferences: photographer.notificationPreferences,
+        hasAvatar: Boolean(photographer.avatarKey),
         hasDriveConnected: this.computeDriveConnected(photographer),
         driveRootFolderId: photographer.driveRootFolderId,
       },

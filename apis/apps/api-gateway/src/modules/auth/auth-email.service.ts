@@ -11,7 +11,7 @@ export class AuthEmailService {
     }
   }
 
-  async sendVerificationCode(email: string, name: string | null, code: string) {
+  async sendVerificationCode(email: string, name: string | null, code: string, purpose: "signup" | "email-change" = "signup") {
     this.assertConfigured();
     const greeting = name?.trim() ? `Hi ${name.trim()},` : "Hello,";
     const escapedGreeting = greeting.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[character]!);
@@ -24,9 +24,9 @@ export class AuthEmailService {
       body: JSON.stringify({
         from: this.env.AUTH_EMAIL_FROM,
         to: [email],
-        subject: "Your Chobi Dao verification code",
-        text: `${greeting}\n\nYour Chobi Dao verification code is ${code}. It expires in 10 minutes. If you did not create this account, you can ignore this email.`,
-        html: `<div style="margin:0;background:#faf5ed;padding:36px 16px;font-family:Arial,sans-serif;color:#38271e"><div style="max-width:480px;margin:auto;border:1px solid #eadbca;border-radius:18px;background:#fffdf9;padding:32px"><p style="margin:0 0 18px;color:#c55a2b;font-size:12px;font-weight:bold;letter-spacing:2px;text-transform:uppercase">CHOBI DAO</p><p style="margin:0 0 10px">${escapedGreeting}</p><h1 style="margin:0 0 12px;font-family:Georgia,serif;font-size:28px">Verify your email</h1><p style="margin:0 0 24px;color:#806b5b;line-height:1.6">Enter this code to finish creating your photographer account.</p><div style="border-radius:12px;background:#fff1e4;padding:18px;text-align:center;color:#b94c1e;font-size:32px;font-weight:bold;letter-spacing:9px">${code}</div><p style="margin:20px 0 0;color:#806b5b;font-size:13px">This code expires in 10 minutes. If you did not request it, you can ignore this email.</p></div></div>`,
+        subject: purpose === "email-change" ? "Confirm your new Chobi Dao email" : "Your Chobi Dao verification code",
+        text: `${greeting}\n\nYour Chobi Dao verification code is ${code}. It expires in 10 minutes. If you did not request this change, you can ignore this email.`,
+        html: `<div style="margin:0;background:#faf5ed;padding:36px 16px;font-family:Arial,sans-serif;color:#38271e"><div style="max-width:480px;margin:auto;border:1px solid #eadbca;border-radius:18px;background:#fffdf9;padding:32px"><p style="margin:0 0 18px;color:#c55a2b;font-size:12px;font-weight:bold;letter-spacing:2px;text-transform:uppercase">CHOBI DAO</p><p style="margin:0 0 10px">${escapedGreeting}</p><h1 style="margin:0 0 12px;font-family:Georgia,serif;font-size:28px">${purpose === "email-change" ? "Confirm your new email" : "Verify your email"}</h1><p style="margin:0 0 24px;color:#806b5b;line-height:1.6">${purpose === "email-change" ? "Enter this code to update the email on your photographer account." : "Enter this code to finish creating your photographer account."}</p><div style="border-radius:12px;background:#fff1e4;padding:18px;text-align:center;color:#b94c1e;font-size:32px;font-weight:bold;letter-spacing:9px">${code}</div><p style="margin:20px 0 0;color:#806b5b;font-size:13px">This code expires in 10 minutes. If you did not request it, you can ignore this email.</p></div></div>`,
       }),
     });
     if (!response.ok) {

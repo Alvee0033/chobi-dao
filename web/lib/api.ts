@@ -222,6 +222,34 @@ export async function me(token: string): Promise<AuthUser> {
   return response;
 }
 
+export type AccountPreferences = { eventUpdates: boolean; weeklySummary: boolean; productNews: boolean };
+export async function getNotificationPreferences(token: string) {
+  return json<{ preferences: AccountPreferences }>("/v1/auth/notifications", { headers: { Authorization: `Bearer ${token}` } });
+}
+export async function updateAccountProfile(token: string, name: string) {
+  return json<{ photographer: { id: string; email: string; name: string } }>("/v1/auth/profile", { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ name }) });
+}
+export async function saveNotificationPreferences(token: string, preferences: AccountPreferences) {
+  return json<{ preferences: AccountPreferences }>("/v1/auth/notifications", { method: "PATCH", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(preferences) });
+}
+export async function changeAccountPassword(token: string, currentPassword: string, newPassword: string) {
+  return json<{ ok: true; signInAgain: true }>("/v1/auth/password", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ currentPassword, newPassword }) });
+}
+export async function requestAccountEmailChange(token: string, newEmail: string, currentPassword: string) {
+  return json<{ ok: true; email: string }>("/v1/auth/email-change", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ newEmail, currentPassword }) });
+}
+export async function verifyAccountEmailChange(token: string, code: string) {
+  return json<{ ok: true; signInAgain: true }>("/v1/auth/email-change/verify", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ code }) });
+}
+export async function uploadAccountAvatar(token: string, image: string) {
+  return json<{ ok: true }>("/v1/auth/avatar", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ image }) });
+}
+export async function getAccountAvatar(token: string): Promise<Blob> {
+  const response = await fetch(`${getApiBaseUrl()}/v1/auth/avatar`, { cache: "no-store", headers: { Authorization: `Bearer ${token}` } });
+  if (!response.ok) throw new Error("Profile photo is not available.");
+  return response.blob();
+}
+
 export function getGoogleConnectUrl(token?: string): string {
   const query = token ? `?state=${encodeURIComponent(token)}` : "";
   return `${getApiBaseUrl()}/v1/auth/google${query}`;

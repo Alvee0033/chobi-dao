@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, Redirect, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Patch, Post, Query, Redirect, Req, Res, UseGuards } from "@nestjs/common";
 import { AuthService } from "./auth.service";
 import type { LivenessTokenRequestDto, LoginDto, SignupDto } from "@framefind/shared-contracts";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
@@ -81,6 +81,57 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   me(@Req() req: { user: { id: string; role: "photographer" | "user" } }) {
     return this.authService.me(req.user.id, req.user.role);
+  }
+
+  @Patch("profile")
+  @UseGuards(JwtAuthGuard)
+  updateProfile(@Req() req: { user: { id: string; role: "photographer" | "user" } }, @Body() body: { name?: string }) {
+    return this.authService.updateProfile(req.user.id, req.user.role, body.name);
+  }
+
+  @Get("avatar")
+  @UseGuards(JwtAuthGuard)
+  async avatar(@Req() req: { user: { id: string; role: "photographer" | "user" } }, @Res() res: any) {
+    const media = await this.authService.getAvatar(req.user.id, req.user.role);
+    res.header("Cache-Control", "private, no-store");
+    res.header("Content-Type", "image/webp");
+    return res.send(media);
+  }
+
+  @Post("avatar")
+  @UseGuards(JwtAuthGuard)
+  uploadAvatar(@Req() req: { user: { id: string; role: "photographer" | "user" } }, @Body() body: { image?: string }) {
+    return this.authService.uploadAvatar(req.user.id, req.user.role, body.image ?? "");
+  }
+
+  @Patch("notifications")
+  @UseGuards(JwtAuthGuard)
+  updateNotifications(@Req() req: { user: { id: string; role: "photographer" | "user" } }, @Body() body: Record<string, unknown>) {
+    return this.authService.updateNotifications(req.user.id, req.user.role, body);
+  }
+
+  @Get("notifications")
+  @UseGuards(JwtAuthGuard)
+  getNotifications(@Req() req: { user: { id: string; role: "photographer" | "user" } }) {
+    return this.authService.getNotifications(req.user.id, req.user.role);
+  }
+
+  @Post("password")
+  @UseGuards(JwtAuthGuard)
+  changePassword(@Req() req: { user: { id: string; role: "photographer" | "user" } }, @Body() body: { currentPassword?: string; newPassword?: string }) {
+    return this.authService.changePassword(req.user.id, req.user.role, body.currentPassword ?? "", body.newPassword ?? "");
+  }
+
+  @Post("email-change")
+  @UseGuards(JwtAuthGuard)
+  requestEmailChange(@Req() req: { user: { id: string; role: "photographer" | "user" } }, @Body() body: { newEmail?: string; currentPassword?: string }) {
+    return this.authService.requestEmailChange(req.user.id, req.user.role, body.newEmail ?? "", body.currentPassword ?? "");
+  }
+
+  @Post("email-change/verify")
+  @UseGuards(JwtAuthGuard)
+  verifyEmailChange(@Req() req: { user: { id: string; role: "photographer" | "user" } }, @Body() body: { code?: string }) {
+    return this.authService.verifyEmailChange(req.user.id, req.user.role, body.code ?? "");
   }
 
   @Post("google/disconnect")

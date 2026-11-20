@@ -35,3 +35,80 @@
 @keyframes cd-settings-shimmer{to{background-position:-200% 0}}
 @media(max-width:560px){.cd-settings-account{gap:12px;padding:15px}.cd-settings-avatar{width:44px;height:44px;border-radius:13px;font-size:21px}.cd-settings-identity h2{font-size:16px}.cd-settings-identity p{font-size:11px}.cd-settings-plan{padding:8px}.cd-settings-plan strong{font-size:10px}.cd-settings-storage{padding:17px}.cd-settings-storage-copy h2{font-size:16px}.cd-settings-remaining strong{font-size:19px}.cd-settings-storage-meta{font-size:10px}}
 @media(prefers-reduced-motion:reduce){.cd-settings-meter span,.cd-settings-skeleton{animation:none;transition:none}}
+
+/* Settings workspace */
+.cd-settings{max-width:1120px!important}
+.cd-settings-heading{margin-bottom:29px}
+.cd-settings-heading h1{font-size:clamp(40px,4vw,52px);letter-spacing:-.06em}
+.cd-settings-layout{display:grid;grid-template-columns:minmax(0,1fr) 292px;align-items:start;gap:20px}
+.cd-settings-primary{display:grid;min-width:0;gap:16px}
+.cd-settings-panel,.cd-settings-account-card{border:1px solid #e8ddd2;border-radius:18px;background:#fffdf9;box-shadow:0 5px 20px #44302308}
+.cd-settings-panel{padding:24px 26px}
+.cd-settings-panel-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:22px}
+.cd-settings-panel-heading h2{margin:7px 0 5px;color:#35251e;font:700 23px/1.15 Georgia,serif;letter-spacing:-.035em}
+.cd-settings-panel-heading p{margin:0;color:#907d70;font-size:12px;line-height:1.5}
+.cd-settings-step{display:grid;width:30px;height:30px;place-items:center;border:1px solid #efdfd2;border-radius:50%;color:#bd6235;font:600 11px Georgia,serif}
+.cd-settings-photo-row{display:flex;align-items:center;gap:14px;margin-bottom:21px;padding:16px;border:1px solid #f0e5dc;border-radius:14px;background:#fffaf5}
+.cd-settings-avatar{width:62px;height:62px;overflow:hidden;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px #eed6c2;background:linear-gradient(135deg,#ffe7cf,#f7d6bb);font:700 25px Georgia,serif}
+.cd-settings-avatar img{width:100%;height:100%;object-fit:cover}
+.cd-settings-photo-copy{display:grid;flex:1;gap:5px}
+.cd-settings-photo-copy strong,.cd-settings-preference strong{color:#433026;font-size:12px}
+.cd-settings-photo-copy span,.cd-settings-preference span{color:#907d70;font-size:11px;line-height:1.5}
+.cd-settings-secondary-button,.cd-settings-primary-button{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:0 15px;border:1px solid #ead7c7;border-radius:10px;background:#fffaf4;color:#96512f;font-size:11px;font-weight:800;cursor:pointer;transition:background .18s,border-color .18s,transform .18s}
+.cd-settings-secondary-button:hover{border-color:#dca47e;background:#fff2e7;transform:translateY(-1px)}
+.cd-settings-primary-button{border-color:#c85620;background:#dd6126;color:white;box-shadow:0 6px 15px #dd612629}
+.cd-settings-primary-button:hover{background:#c94f1b}
+.cd-settings-secondary-button:disabled,.cd-settings-primary-button:disabled{opacity:.56;cursor:wait;transform:none}
+.cd-settings-photo-row input[type=file]{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+.cd-settings-form{display:grid;grid-template-columns:1fr 1fr;align-items:end;gap:14px}
+.cd-settings-field{display:grid;min-width:0;gap:7px}
+.cd-settings-field>span{color:#695548;font-size:10px;font-weight:800}
+.cd-settings-field input{width:100%;min-width:0;height:42px;padding:0 12px;border:1px solid #e9ddd2;border-radius:10px;background:#fffaf5;color:#433026;font-size:12px;font-family:inherit;font-weight:500;outline:none;transition:border-color .18s,box-shadow .18s}
+.cd-settings-field input:focus{border-color:#de9568;box-shadow:0 0 0 3px #f8e4d5}
+.cd-settings-field input[readonly]{background:#f7f2ec;color:#89786d}
+.cd-settings-field small{color:#a08d80;font-size:10px}
+.cd-settings-form>.cd-settings-primary-button{justify-self:start;grid-column:1/-1}
+.cd-settings-preferences{display:grid}
+.cd-settings-preference{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:14px 0;border-top:1px solid #f1e8e0}
+.cd-settings-preference:first-child{border-top:0;padding-top:0}
+.cd-settings-preference>div{display:grid;gap:4px}
+.cd-settings-preference button{position:relative;flex:none;width:39px;height:23px;padding:2px;border:1px solid #ded2c7;border-radius:50px;background:#eee8e2;cursor:pointer;transition:background .2s,border-color .2s}
+.cd-settings-preference button span{display:block;width:17px;height:17px;border-radius:50%;background:white;box-shadow:0 1px 3px #3f281a28;transition:transform .2s}
+.cd-settings-preference button.is-on{border-color:#d15c25;background:#df682d}
+.cd-settings-preference button.is-on span{transform:translateX(16px)}
+.cd-settings-preference button:disabled{opacity:.6;cursor:wait}
+.cd-settings-security-form{grid-template-columns:1fr 1fr}
+.cd-settings-security-form .cd-settings-secondary-button,.cd-settings-security-form .cd-settings-text-button{justify-self:start}
+.cd-settings-pending{grid-column:1/-1;margin:0;color:#7e6555;font-size:12px;line-height:1.6}
+.cd-settings-divider{height:1px;margin:23px 0;background:#f0e6de}
+.cd-settings-password-title{display:grid;grid-column:1/-1;gap:5px}
+.cd-settings-password-title strong{color:#433026;font:700 16px Georgia,serif}
+.cd-settings-password-title span{color:#907d70;font-size:11px}
+.cd-settings-password-fields{display:grid;grid-column:1/-1;grid-template-columns:1fr 1fr;gap:14px}
+.cd-settings-text-button{border:0;background:none;color:#a65e3b;font-size:11px;font-weight:800;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.cd-settings-aside{display:grid;gap:14px}
+.cd-settings-account-card{padding:18px}
+.cd-settings-account-top{display:flex;align-items:center;gap:11px;margin-bottom:16px}
+.cd-settings-account-top>div:last-child{display:grid;min-width:0;gap:5px}
+.cd-settings-account-top strong{overflow:hidden;color:#39291f;font:700 16px Georgia,serif;text-overflow:ellipsis;white-space:nowrap}
+.cd-settings-account-top>div>span{overflow:hidden;color:#88776b;font-size:10px;text-overflow:ellipsis;white-space:nowrap}
+.cd-settings-avatar-small{width:43px;height:43px;font-size:18px}
+.cd-settings-plan{display:flex;align-items:center;justify-content:space-between;gap:7px;padding:12px;border:1px solid #eddfd3;border-radius:11px;background:#fff9f3;color:#68432e;text-decoration:none}
+.cd-settings-plan>span{color:#bc6030;font-size:8px;font-weight:900;letter-spacing:.14em}
+.cd-settings-plan strong{display:flex;align-items:center;gap:6px;font-size:10px}
+.cd-settings-plan:hover,.cd-settings-upgrade:hover{border-color:#e5ad88;background:#fff4e9}
+.cd-settings-storage{padding:18px}
+.cd-settings-storage-top{margin-bottom:15px}
+.cd-settings-storage-copy h2{font-size:17px}
+.cd-settings-space-total{display:grid;gap:3px;margin:0 0 12px}
+.cd-settings-space-total strong{color:#39291f;font:700 25px Georgia,serif}
+.cd-settings-space-total span{color:#928174;font-size:10px}
+.cd-settings-storage-meta{font-size:10px}
+.cd-settings-upgrade{margin-top:14px}
+.cd-settings-help{margin:0 2px}
+.cd-settings-notice{display:flex;align-items:center;gap:9px;margin:0 0 15px;padding:11px 14px;border:1px solid #dce9da;border-radius:11px;background:#f3f8f1;color:#4b724b;font-size:11px;line-height:1.45}
+.cd-settings-notice svg{flex:none}
+@media(max-width:860px){.cd-settings-layout{grid-template-columns:minmax(0,1fr) 260px;gap:14px}.cd-settings-panel{padding:20px}}
+@media(max-width:700px){.cd-settings-layout{grid-template-columns:1fr}.cd-settings-aside{grid-template-columns:1fr 1fr;align-items:start}.cd-settings-account-card{grid-column:1/-1}.cd-settings-help{grid-column:1/-1}}
+@media(max-width:520px){.cd-settings-panel{padding:17px}.cd-settings-panel-heading h2{font-size:20px}.cd-settings-panel-heading p{font-size:11px}.cd-settings-photo-row{gap:10px;padding:12px}.cd-settings-photo-copy span{font-size:10px}.cd-settings-photo-row .cd-settings-secondary-button{padding:0 10px;font-size:10px}.cd-settings-form,.cd-settings-security-form,.cd-settings-password-fields{grid-template-columns:1fr}.cd-settings-password-fields{grid-column:auto}.cd-settings-password-title,.cd-settings-pending{grid-column:auto}.cd-settings-aside{grid-template-columns:1fr}.cd-settings-account-card,.cd-settings-help{grid-column:auto}.cd-settings-preference{gap:9px}.cd-settings-preference span{max-width:245px}.cd-settings-form>.cd-settings-primary-button{grid-column:auto}}
+@media(prefers-reduced-motion:reduce){.cd-settings *{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}

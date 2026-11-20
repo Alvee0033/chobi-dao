@@ -9,6 +9,7 @@ describe("AuthService email verification", () => {
   let service: AuthService;
 
   beforeEach(() => {
+    jest.restoreAllMocks();
     jest.clearAllMocks();
     mockEmail.assertConfigured.mockReset();
     mockEmail.sendVerificationCode.mockReset().mockResolvedValue(undefined);
@@ -17,8 +18,9 @@ describe("AuthService email verification", () => {
         findUnique: jest.fn(),
         create: jest.fn(),
         updateMany: jest.fn(),
+        update: jest.fn(),
       },
-      refreshToken: { create: jest.fn().mockResolvedValue({}) },
+      refreshToken: { create: jest.fn().mockResolvedValue({}), deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     };
     service = new AuthService(prisma, mockDrive, mockEmail as any);
   });
@@ -81,5 +83,38 @@ describe("AuthService email verification", () => {
       where: { id: "photographer-1", emailVerified: false, emailVerificationAttempts: { lt: 5 } },
       data: { emailVerificationAttempts: { increment: 1 } },
     }));
+  });
+
+  it("persists only supported notification preferences", async () => {
+    prisma.photographer.update.mockResolvedValue({});
+    await expect(service.updateNotifications("photographer-1", "photographer", {
+      eventUpdates: true, weeklySummary: "yes", productNews: false, unknownSetting: true,
+    })).resolves.toEqual({ preferences: { eventUpdates: true, weeklySummary: false, productNews: false } });
+    expect(prisma.photographer.update).toHaveBeenCalledWith({
+      where: { id: "photographer-1" },
+      data: { notificationPreferences: { eventUpdates: true, weeklySummary: false, productNews: false } },
+    });
+  });
+
+  it("requires the current password and revokes refresh sessions on password update", async () => {
+    prisma.photographer.findUnique.mockResolvedValue({ passwordHash: "stored-hash" });
+    jest.spyOn(require("bcryptjs"), "compare").mockResolvedValueOnce(true as never);
+    jest.spyOn(require("bcryptjs"), "hash").mockResolvedValueOnce("new-hash" as never);
+    prisma.photographer.update.mockResolvedValue({});
+
+    await expect(service.changePassword("photographer-1", "photographer", "current-password", "a-new-secure-password"))
+      .resolves.toEqual({ ok: true, signInAgain: true });
+    expect(prisma.photographer.update).toHaveBeenCalledWith({
+      where: { id: "photographer-1" }, data: { passwordHash: "new-hash" },
+    });
+    expect(prisma.refreshToken.deleteMany).toHaveBeenCalledWith({ where: { photographerId: "photographer-1" } });
+  });
+
+  it("rejects a wrong current password without updating credentials", async () => {
+    prisma.photographer.findUnique.mockResolvedValue({ passwordHash: "stored-hash" });
+    jest.spyOn(require("bcryptjs"), "compare").mockResolvedValueOnce(false as never);
+    await expect(service.changePassword("photographer-1", "photographer", "wrong-password", "a-new-secure-password"))
+      .rejects.toThrow("Current password is incorrect");
+    expect(prisma.photographer.update).not.toHaveBeenCalled();
   });
 });

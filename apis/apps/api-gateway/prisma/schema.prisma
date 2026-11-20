@@ -39,6 +39,13 @@ model Photographer {
   id                    String         @id @default(uuid()) @db.Uuid
   email                 String         @unique
   name                  String?
+  avatarKey             String?        @map("avatar_key")
+  notificationPreferences Json         @default("{\"eventUpdates\":true,\"weeklySummary\":false,\"productNews\":false}") @map("notification_preferences")
+  pendingEmail          String?        @map("pending_email")
+  emailChangeCodeHash   String?        @map("email_change_code_hash")
+  emailChangeExpiresAt  DateTime?      @map("email_change_expires_at") @db.Timestamptz(6)
+  emailChangeSentAt     DateTime?      @map("email_change_sent_at") @db.Timestamptz(6)
+  emailChangeAttempts   Int            @default(0) @map("email_change_attempts")
   passwordHash          String?        @map("password_hash")
   emailVerified         Boolean        @default(true) @map("email_verified")
   emailVerificationCodeHash String?    @map("email_verification_code_hash")

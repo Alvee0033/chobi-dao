@@ -31,5 +31,5 @@ export function DashboardRoute() {
 
   const onAuth = (state: DashboardAuthState | null) => state ? login(state) : logout();
 
-  return <div className="min-h-screen font-sans selection:bg-orange-200 selection:text-orange-900">{section ? <DashboardSectionRoute section={section} auth={auth} onLogout={() => { onAuth(null); router.push("/"); }} showToast={setToastMessage} /> : <EventsWorkspace auth={auth} onAuth={onAuth} showToast={setToastMessage} setView={(view) => { if (view === "landing") router.push("/"); if (view === "auth") router.push("/auth"); }} />}<Toast message={toastMessage} onClose={() => setToastMessage("")} /></div>;
+  return <div className="min-h-screen font-sans selection:bg-orange-200 selection:text-orange-900">{section ? <DashboardSectionRoute section={section} auth={auth} onAuth={onAuth} onLogout={() => { onAuth(null); router.push("/"); }} showToast={setToastMessage} /> : <EventsWorkspace auth={auth} onAuth={onAuth} showToast={setToastMessage} setView={(view) => { if (view === "landing") router.push("/"); if (view === "auth") router.push("/auth"); }} />}<Toast message={toastMessage} onClose={() => setToastMessage("")} /></div>;
 }
