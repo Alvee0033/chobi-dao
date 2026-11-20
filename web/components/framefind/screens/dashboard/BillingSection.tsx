@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getBillingPayments, getBillingUsage, startBillingCheckout, type BillingPayment, type BillingUsage } from "@/lib/api";
+import { getBillingPayments, getBillingUsage, startBillingCheckout, type BillingPayment, type BillingProvider, type BillingUsage } from "@/lib/api";
 import type { DashboardAuthState, ShowToast } from "../../types";
 import { Icons } from "../../icons";
 import "./billing-section.css";
+import "./billing-providers.css";
 
 const formatBytes = (bytes: number) => `${(bytes / 1024 ** 3).toFixed(bytes >= 10 * 1024 ** 3 ? 0 : 1)} GB`;
 const dateLabel = (value: string | null) => value ? new Date(value).toLocaleDateString("en-BD", { day: "numeric", month: "short", year: "numeric" }) : "—";
@@ -38,14 +39,14 @@ export function BillingSection({ auth, showToast }: { auth: DashboardAuthState |
     if (state) window.history.replaceState({}, "", window.location.pathname);
   }, []);
 
-  const checkout = async () => {
+  const checkout = async (provider: BillingProvider) => {
     if (!auth?.accessToken) return;
     setCheckoutBusy(true);
     try {
-      const result = await startBillingCheckout(auth.accessToken);
+      const result = await startBillingCheckout(auth.accessToken, provider);
       window.location.assign(result.checkoutUrl);
     } catch (caught) {
-      showToast(caught instanceof Error ? caught.message : "Could not start bKash checkout.");
+      showToast(caught instanceof Error ? caught.message : "Could not start checkout.");
       setCheckoutBusy(false);
     }
   };
@@ -58,7 +59,7 @@ export function BillingSection({ auth, showToast }: { auth: DashboardAuthState |
   return <section className="cd-billing" aria-labelledby="billing-title">
     <header className="cd-billing-heading"><div><p>YOUR ACCOUNT</p><h1 id="billing-title">Plan &amp; billing</h1><span>More room for every celebration you deliver.</span></div><span className={`cd-plan-status ${proActive ? "is-pro" : ""}`}>{usage?.trialDaysRemaining ? `PRO TRIAL · ${usage.trialDaysRemaining} DAYS` : `${proActive ? "PRO" : "FREE"} PLAN`}</span></header>
 
-    {usage?.trialDaysRemaining ? <div className="cd-trial-note"><span className="cd-trial-spark"><Icons.Sparkles size={18} /></span><div><strong>Your Pro trial is underway.</strong><p>{usage.trialDaysRemaining} days remaining. No automatic charge; choose Pro when you’re ready.</p></div><button onClick={checkout} disabled={checkoutBusy}>{checkoutBusy ? "Opening bKash…" : "Keep Pro · ৳399 / month"}<Icons.ArrowRight size={16} /></button></div> : null}
+    {usage?.trialDaysRemaining ? <div className="cd-trial-note"><span className="cd-trial-spark"><Icons.Sparkles size={18} /></span><div><strong>Your Pro trial is underway.</strong><p>{usage.trialDaysRemaining} days remaining. No automatic charge; choose a payment method below when you’re ready.</p></div></div> : null}
 
     <div className="cd-plan-grid">
       <article className={`cd-plan-option ${!proActive ? "selected" : ""}`}>
@@ -69,16 +70,24 @@ export function BillingSection({ auth, showToast }: { auth: DashboardAuthState |
       <article className={`cd-plan-option cd-plan-pro ${proActive && !usage?.trialDaysRemaining ? "selected" : ""}`}>
         <div className="cd-plan-top"><div><span className="cd-plan-index">02 / GROW</span><h2>Pro</h2><p>For busy studios and full season galleries.</p></div><span className="cd-plan-price">৳399 <small>/ month</small></span></div>
         <ul><li><Icons.Check size={16} /> 20 GB photo storage</li><li><Icons.Check size={16} /> Unlimited face matching</li><li><Icons.Check size={16} /> Unlimited photo uploads*</li><li><Icons.Check size={16} /> Full resolution downloads</li></ul>
-        {proActive && !usage?.trialDaysRemaining ? <span className="cd-current-plan">Current plan · renews manually</span> : <button className="cd-upgrade-button" onClick={checkout} disabled={checkoutBusy}>{checkoutBusy ? "Opening secure checkout…" : <><span>Continue with bKash</span><b>৳399 <small>/ month</small></b><Icons.ArrowRight size={17} /></>}</button>}
+        {proActive && !usage?.trialDaysRemaining ? <span className="cd-current-plan">Current plan · renews manually</span> : <div id="pro-checkout" className="cd-checkout-options" aria-label="Choose a payment method">{([
+          { id: "uddoktapay" as const, title: "UddoktaPay", detail: "Secure hosted checkout", mark: "U" },
+          { id: "bkash" as const, title: "bKash", detail: "Direct merchant checkout", mark: "b" },
+        ]).map((provider) => {
+          const available = usage?.checkoutProviders?.includes(provider.id) ?? false;
+          return <button key={provider.id} type="button" className={`cd-checkout-choice cd-checkout-${provider.id}`} onClick={() => checkout(provider.id)} disabled={checkoutBusy || !available} aria-describedby={`${provider.id}-availability`}>
+            <span className="cd-checkout-mark" aria-hidden="true">{provider.mark}</span><span className="cd-checkout-copy"><strong>{provider.title}</strong><small id={`${provider.id}-availability`}>{available ? provider.detail : "Merchant setup required"}</small></span><span className="cd-checkout-arrow" aria-hidden="true">{checkoutBusy ? "…" : "→"}</span>
+          </button>;
+        })}<p className="cd-checkout-note">{usage?.checkoutProviders?.length ? "Payment is verified securely by Chobi Dao before Pro activates." : "Checkout methods are unavailable until merchant credentials are configured."}</p></div>}
       </article>
     </div>
     <p className="cd-billing-disclaimer">*Uploads are subject to the 20 GB storage limit. One payment covers 30 days. Renewal is manual; Chobi Dao never charges automatically.</p>
 
     <div className="cd-usage-panel"><div className="cd-usage-title"><div><p>STORAGE</p><h2>Your gallery library</h2></div><span>{formatBytes(usage?.storageUsedBytes ?? 0)} <i>/ {formatBytes(usage?.storageLimitBytes ?? 0)}</i></span></div><div className="cd-usage-track"><span style={{ width: `${storagePercent}%` }} /></div><div className="cd-usage-meta"><span>{usage?.photosUsed ?? 0} photos uploaded</span><span>{usage?.matchesLimit == null ? "Unlimited matching" : `${usage.matchesUsed} / ${usage.matchesLimit} monthly matches`}</span></div></div>
 
-    <div className="cd-payments"><div className="cd-usage-title"><div><p>PAYMENT HISTORY</p><h2>Receipts &amp; renewals</h2></div><span className="cd-bkash-mark">bKash</span></div>
-      {payments.length ? <div className="cd-payments-list">{payments.map((payment) => <div className="cd-payment-row" key={payment.id}><span className={`cd-payment-state ${payment.status}`}>{payment.status}</span><strong>৳{payment.amount ?? "399.00"}</strong><span>{dateLabel(payment.createdAt)}</span><span>{payment.transactionId ? `Txn ${payment.transactionId}` : payment.currentPeriodEnd ? `Until ${dateLabel(payment.currentPeriodEnd)}` : "—"}</span></div>)}</div> : <p className="cd-no-payments">No payments yet. Your receipts will appear here after checkout.</p>}
+    <div className="cd-payments"><div className="cd-usage-title"><div><p>PAYMENT HISTORY</p><h2>Receipts &amp; renewals</h2></div><span className="cd-bkash-mark">SECURE PAYMENTS</span></div>
+      {payments.length ? <div className="cd-payments-list">{payments.map((payment) => <div className="cd-payment-row" key={payment.id}><span className={`cd-payment-state ${payment.status}`}>{payment.status}</span><strong>৳{payment.amount ?? "399.00"}</strong><span className="cd-payment-provider">{payment.provider === "uddoktapay" ? "UddoktaPay" : "bKash"}</span><span>{dateLabel(payment.createdAt)}</span><span>{payment.transactionId ? `Txn ${payment.transactionId}` : payment.currentPeriodEnd ? `Until ${dateLabel(payment.currentPeriodEnd)}` : "—"}</span></div>)}</div> : <p className="cd-no-payments">No payments yet. Your receipts will appear here after checkout.</p>}
     </div>
-    <p className="cd-billing-support">Secure checkout by <strong>bKash</strong>. Payment confirmation is verified by Chobi Dao’s server before the plan changes.</p>
+    <p className="cd-billing-support">Choose UddoktaPay or direct bKash checkout. Chobi Dao verifies every payment server-side before changing your plan.</p>
   </section>;
 }

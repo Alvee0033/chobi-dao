@@ -12,6 +12,17 @@ const PAID_PLAN_DAYS = 30;
 type BkashToken = { id_token: string; expires_in?: number };
 type BkashCreate = { paymentID: string; bkashURL: string; statusCode?: string; statusMessage?: string };
 type BkashExecution = { paymentID: string; trxID?: string; transactionStatus?: string; amount?: string; currency?: string; statusCode?: string; statusMessage?: string };
+type UddoktaCharge = { status?: boolean; message?: string; payment_url?: string };
+type UddoktaVerification = {
+  status?: string;
+  message?: string;
+  invoice_id?: string;
+  amount?: string | number;
+  charged_amount?: string | number;
+  transaction_id?: string;
+  payment_method?: string;
+  metadata?: Record<string, string> | string;
+};
 
 @Injectable()
 export class BillingService {
@@ -55,10 +66,15 @@ export class BillingService {
       currentPeriodEnd: activeSubscription?.currentPeriodEnd ?? null,
       lastTransactionId: activeSubscription?.transactionId ?? null,
       monthlyPrice: plan === "pro" && !trialActive ? PAID_PLAN_AMOUNT : null,
+      checkoutProviders: [
+        ...(this.env.UDDOKTAPAY_API_KEY ? ["uddoktapay"] : []),
+        ...(this.env.BKASH_APP_KEY && this.env.BKASH_APP_SECRET && this.env.BKASH_USERNAME && this.env.BKASH_PASSWORD ? ["bkash"] : []),
+      ],
     };
   }
 
-  async startCheckout(photographerId: string) {
+  async startCheckout(photographerId: string, provider: "bkash" | "uddoktapay") {
+    if (provider === "uddoktapay") return this.startUddoktaCheckout(photographerId);
     this.assertBkashConfigured();
     const photographer = await this.prisma.photographer.findUnique({ where: { id: photographerId }, select: { id: true, email: true } });
     if (!photographer) throw new NotFoundException("Photographer not found");
@@ -86,6 +102,78 @@ export class BillingService {
       },
     });
     return { checkoutUrl: created.bkashURL, paymentId: created.paymentID };
+  }
+
+  private async startUddoktaCheckout(photographerId: string) {
+    const photographer = await this.prisma.photographer.findUnique({ where: { id: photographerId }, select: { id: true, name: true, email: true } });
+    if (!photographer) throw new NotFoundException("Photographer not found");
+    const attempt = await this.prisma.subscription.create({
+      data: { photographerId, provider: "uddoktapay", status: "pending", plan: "pro", amount: PAID_PLAN_AMOUNT, currency: "BDT" },
+      select: { id: true },
+    });
+    const apiBaseUrl = this.uddoktaApiBaseUrl();
+    const apiBase = this.env.API_BASE_URL.replace(/\/$/, "");
+    const appBase = this.env.APP_BASE_URL.replace(/\/$/, "");
+    try {
+      const created = await this.uddoktaRequest<UddoktaCharge>("/checkout-v2", {
+        full_name: photographer.name || "Photographer",
+        email: photographer.email,
+        amount: PAID_PLAN_AMOUNT,
+        metadata: { subscription_id: attempt.id, photographer_id: photographer.id },
+        redirect_url: `${apiBase}/v1/billing/uddoktapay/callback`,
+        return_type: "GET",
+        cancel_url: `${apiBase}/v1/billing/uddoktapay/cancel?subscription_id=${encodeURIComponent(attempt.id)}`,
+      });
+      if (created.status !== true || !created.payment_url) throw new ServiceUnavailableException(created.message || "UddoktaPay did not create a checkout");
+      const paymentUrl = new URL(created.payment_url);
+      if (paymentUrl.protocol !== "https:" || paymentUrl.origin !== new URL(apiBaseUrl).origin) {
+        throw new ServiceUnavailableException("UddoktaPay returned an invalid checkout URL");
+      }
+      return { checkoutUrl: paymentUrl.toString(), paymentId: attempt.id };
+    } catch (error) {
+      await this.prisma.subscription.updateMany({ where: { id: attempt.id, status: "pending" }, data: { status: "failed" } });
+      throw error;
+    }
+  }
+
+  async completeUddoktaCheckout(invoiceId: string) {
+    if (!invoiceId || invoiceId.length > 128) throw new BadRequestException("Invalid UddoktaPay invoice reference");
+    const payment = await this.uddoktaRequest<UddoktaVerification>("/verify-payment", { invoice_id: invoiceId });
+    const metadata = typeof payment.metadata === "string" ? this.parseUddoktaMetadata(payment.metadata) : payment.metadata;
+    const attemptId = metadata?.subscription_id;
+    if (payment.status !== "COMPLETED" || payment.invoice_id !== invoiceId || !attemptId ||
+      Math.round(Number(payment.amount) * 100) !== 39_900 || !payment.transaction_id) {
+      throw new UnauthorizedException("UddoktaPay payment could not be verified");
+    }
+
+    const attempt = await this.prisma.subscription.findFirst({ where: { id: attemptId, provider: "uddoktapay" } });
+    if (!attempt || (metadata?.photographer_id && metadata.photographer_id !== attempt.photographerId)) {
+      throw new NotFoundException("Payment attempt not found");
+    }
+    if (attempt.status === "succeeded") return { ok: true, photographerId: attempt.photographerId };
+    if (attempt.status !== "pending") return { ok: false, photographerId: attempt.photographerId };
+
+    const now = new Date();
+    const previous = await this.prisma.subscription.findFirst({
+      where: { photographerId: attempt.photographerId, status: "succeeded", currentPeriodEnd: { gt: now } },
+      orderBy: { currentPeriodEnd: "desc" }, select: { currentPeriodEnd: true },
+    });
+    const currentPeriodEnd = new Date(Math.max(now.getTime(), previous?.currentPeriodEnd?.getTime() ?? 0) + PAID_PLAN_DAYS * 86_400_000);
+    const activated = await this.prisma.subscription.updateMany({
+      where: { id: attempt.id, status: "pending" },
+      data: { providerPaymentId: invoiceId, status: "succeeded", transactionId: payment.transaction_id, currentPeriodEnd },
+    });
+    if (!activated.count) return { ok: true, photographerId: attempt.photographerId };
+    await this.prisma.photographer.update({ where: { id: attempt.photographerId }, data: { plan: "pro" } });
+    return { ok: true, photographerId: attempt.photographerId };
+  }
+
+  async cancelUddoktaCheckout(subscriptionId: string) {
+    if (!subscriptionId || subscriptionId.length > 64) throw new BadRequestException("Invalid subscription reference");
+    const attempt = await this.prisma.subscription.findFirst({ where: { id: subscriptionId, provider: "uddoktapay" } });
+    if (!attempt) throw new NotFoundException("Payment attempt not found");
+    if (attempt.status === "pending") await this.prisma.subscription.updateMany({ where: { id: attempt.id, status: "pending" }, data: { status: "cancelled" } });
+    return { ok: true, photographerId: attempt.photographerId };
   }
 
   async completeCheckout(paymentId: string, callbackStatus: string) {
@@ -125,11 +213,34 @@ export class BillingService {
 
   async history(photographerId: string) {
     const subscriptions = await this.prisma.subscription.findMany({
-      where: { photographerId, provider: "bkash", status: { in: ["succeeded", "failed", "cancelled"] } },
+      where: { photographerId, provider: { in: ["bkash", "uddoktapay"] }, status: { in: ["succeeded", "failed", "cancelled"] } },
       orderBy: { createdAt: "desc" }, take: 20,
-      select: { id: true, status: true, amount: true, currency: true, transactionId: true, currentPeriodEnd: true, createdAt: true },
+      select: { id: true, provider: true, status: true, amount: true, currency: true, transactionId: true, currentPeriodEnd: true, createdAt: true },
     });
     return { payments: subscriptions };
+  }
+
+  private uddoktaApiBaseUrl() {
+    return this.env.UDDOKTAPAY_BASE_URL.replace(/\/+$/, "");
+  }
+
+  private parseUddoktaMetadata(value: string): Record<string, string> | undefined {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      return parsed && typeof parsed === "object" ? parsed as Record<string, string> : undefined;
+    } catch { return undefined; }
+  }
+
+  private async uddoktaRequest<T>(path: string, body: unknown): Promise<T> {
+    if (!this.env.UDDOKTAPAY_API_KEY) throw new ServiceUnavailableException("UddoktaPay is not configured");
+    const response = await fetch(`${this.uddoktaApiBaseUrl()}${path}`, {
+      method: "POST", signal: AbortSignal.timeout(30_000),
+      headers: { "Content-Type": "application/json", Accept: "application/json", "RT-UDDOKTAPAY-API-KEY": this.env.UDDOKTAPAY_API_KEY },
+      body: JSON.stringify(body),
+    });
+    const payload = await response.json() as T & { message?: string };
+    if (!response.ok) throw new ServiceUnavailableException(payload.message || "UddoktaPay request failed");
+    return payload;
   }
 
   private assertBkashConfigured() {

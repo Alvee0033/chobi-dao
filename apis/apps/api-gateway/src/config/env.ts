@@ -20,6 +20,8 @@ export const envSchema = z.object({
   BKASH_USERNAME: z.string().default(""),
   BKASH_PASSWORD: z.string().default(""),
   BKASH_CALLBACK_URL: z.preprocess((value) => value === "" ? undefined : value, z.string().url().optional()),
+  UDDOKTAPAY_BASE_URL: z.string().url().default("https://sandbox.uddoktapay.com/api"),
+  UDDOKTAPAY_API_KEY: z.string().default(""),
   APP_BASE_URL: z.string().default("http://localhost:3000"),
   API_BASE_URL: z.string().default("http://localhost:3001"),
   // AI Service (InsightFace self-hosted)

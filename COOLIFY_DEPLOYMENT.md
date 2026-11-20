@@ -50,7 +50,13 @@ BKASH_USERNAME=your_bkash_sandbox_username
 BKASH_PASSWORD=your_bkash_sandbox_password
 # Optional; defaults to https://api-chobi.yourdomain.com/v1/billing/bkash/callback
 BKASH_CALLBACK_URL=
+
+# UddoktaPay hosted checkout (preferred when configured)
+UDDOKTAPAY_BASE_URL=https://your-uddoktapay-host/api
+UDDOKTAPAY_API_KEY=your_uddoktapay_api_key
 ```
+
+The billing page offers UddoktaPay and direct bKash as separate checkout options. UddoktaPay requires an API key with `payment:checkout` and `payment:verify` abilities. Direct bKash is shown only when all four bKash merchant credentials are configured. Keep both keys and merchant credentials in Coolify's runtime environment; never commit them.
 
 ### Step 4: Routing / FQDN Setup in Coolify
 In Coolify service settings, map the domains to the respective service ports:

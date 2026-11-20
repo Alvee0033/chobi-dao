@@ -100,6 +100,8 @@ services:
       BKASH_USERNAME: ${BKASH_USERNAME:-}
       BKASH_PASSWORD: ${BKASH_PASSWORD:-}
       BKASH_CALLBACK_URL: ${BKASH_CALLBACK_URL:-}
+      UDDOKTAPAY_BASE_URL: ${UDDOKTAPAY_BASE_URL:-https://sandbox.uddoktapay.com/api}
+      UDDOKTAPAY_API_KEY: ${UDDOKTAPAY_API_KEY:-}
       AI_SERVICE_URL: http://ai-service:8000
       STORAGE_DRIVER: minio
       S3_ENDPOINT: http://minio:9000

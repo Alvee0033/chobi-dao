@@ -24,8 +24,9 @@ export type BillingUsage = {
   currentPeriodEnd: string | null;
   lastTransactionId: string | null;
   monthlyPrice: string | null;
+  checkoutProviders: Array<"bkash" | "uddoktapay">;
 };
-export type BillingPayment = { id: string; status: string; amount: string | null; currency: string; transactionId: string | null; currentPeriodEnd: string | null; createdAt: string };
+export type BillingPayment = { id: string; provider: "bkash" | "uddoktapay" | string; status: string; amount: string | null; currency: string; transactionId: string | null; currentPeriodEnd: string | null; createdAt: string };
 export type AuthUser = {
   id: string;
   email: string;
@@ -419,8 +420,10 @@ export function getBillingPayments(token: string): Promise<{ payments: BillingPa
   return json<{ payments: BillingPayment[] }>("/v1/billing/payments", { headers: { Authorization: `Bearer ${token}` } });
 }
 
-export function startBillingCheckout(token: string): Promise<{ checkoutUrl: string; paymentId: string }> {
-  return json<{ checkoutUrl: string; paymentId: string }>("/v1/billing/checkout", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+export type BillingProvider = "bkash" | "uddoktapay";
+
+export function startBillingCheckout(token: string, provider: BillingProvider): Promise<{ checkoutUrl: string; paymentId: string }> {
+  return json<{ checkoutUrl: string; paymentId: string }>("/v1/billing/checkout", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ provider }) });
 }
 
 export async function getPublicPersonPhotos(slug: string, personId: string): Promise<SearchPhoto[]> {

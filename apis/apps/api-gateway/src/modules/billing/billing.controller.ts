@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
 import { BillingService } from "./billing.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { AuthRoles } from "../../common/auth/auth-role.decorator";
@@ -25,8 +25,9 @@ export class BillingController {
   @Post("checkout")
   @UseGuards(JwtAuthGuard)
   @AuthRoles("photographer")
-  checkout(@Req() req: { user: { id: string } }) {
-    return this.billing.startCheckout(req.user.id);
+  checkout(@Req() req: { user: { id: string } }, @Body("provider") provider: string) {
+    if (provider !== "bkash" && provider !== "uddoktapay") throw new BadRequestException("Unsupported payment provider");
+    return this.billing.startCheckout(req.user.id, provider);
   }
 
   @Get("bkash/callback")
@@ -39,9 +40,27 @@ export class BillingController {
     try {
       const result = await this.billing.completeCheckout(paymentId, status);
       const state = result.ok ? "success" : status === "cancel" ? "cancelled" : "failed";
-      return response.redirect(`${appUrl}/dashboard/settings?billing=${state}`);
+      return response.redirect(`${appUrl}/dashboard/billing?billing=${state}`);
     } catch {
-      return response.redirect(`${appUrl}/dashboard/settings?billing=failed`);
+      return response.redirect(`${appUrl}/dashboard/billing?billing=failed`);
     }
+  }
+
+  @Get("uddoktapay/callback")
+  async uddoktapayCallback(@Query("invoice_id") invoiceId: string, @Res() response: any) {
+    const appUrl = parseEnv().APP_BASE_URL.replace(/\/$/, "");
+    try {
+      const result = await this.billing.completeUddoktaCheckout(invoiceId);
+      return response.redirect(`${appUrl}/dashboard/billing?billing=${result.ok ? "success" : "failed"}`);
+    } catch {
+      return response.redirect(`${appUrl}/dashboard/billing?billing=failed`);
+    }
+  }
+
+  @Get("uddoktapay/cancel")
+  async uddoktapayCancel(@Query("subscription_id") subscriptionId: string, @Res() response: any) {
+    const appUrl = parseEnv().APP_BASE_URL.replace(/\/$/, "");
+    try { await this.billing.cancelUddoktaCheckout(subscriptionId); } catch { /* Keep provider cancellation UX available even if its reference is invalid. */ }
+    return response.redirect(`${appUrl}/dashboard/billing?billing=cancelled`);
   }
 }
