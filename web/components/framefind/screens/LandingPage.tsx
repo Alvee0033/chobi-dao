@@ -42,7 +42,7 @@ const steps = [
 function Brand({ light = false }: { light?: boolean }) {
   return (
     <Link href="/" className={`cd-brand${light ? " cd-brand-light" : ""}`} aria-label="Chobi Dao home">
-      <span className="cd-brand-mark"><Image src="/logo-mark.webp" alt="" width={40} height={40} /></span>
+      <span className="cd-brand-mark"><Image src="/assets/chobidao.webp" alt="" width={40} height={40} /></span>
       <span>Chobi Dao</span>
     </Link>
   );

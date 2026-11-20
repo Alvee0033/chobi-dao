@@ -73,16 +73,24 @@ function EventCard({
   event,
   onView,
   onDelete,
+  imagePriority,
 }: {
   event: EventPayload;
   onView: () => void;
   onDelete: () => void;
+  imagePriority: boolean;
 }) {
+  const [imageState, setImageState] = useState({ src: event.thumbnailUrl ?? "", loaded: false, failed: false });
+  const imageReady = imageState.src === (event.thumbnailUrl ?? "") && imageState.loaded;
+  const imageFailed = imageState.src === (event.thumbnailUrl ?? "") && imageState.failed;
   return (
     <article className="studio-event-card" data-testid="event-card">
       <button className="studio-event-card-main" type="button" onClick={onView} aria-label={`Manage ${event.name}`}>
         <div className="studio-event-card-cover">
-          {event.thumbnailUrl ? <img src={event.thumbnailUrl} alt="" loading="lazy" decoding="async" /> : <div className="studio-event-card-placeholder"><Icons.Camera size={30} /></div>}
+          {event.thumbnailUrl && !imageFailed ? <>
+            {!imageReady && <div className="studio-event-card-image-loading" aria-hidden="true"><Icons.Camera size={26} /></div>}
+            <img key={event.thumbnailUrl} src={event.thumbnailUrl} alt="" loading={imagePriority ? "eager" : "lazy"} fetchPriority={imagePriority ? "high" : "auto"} decoding="async" onLoad={() => setImageState({ src: event.thumbnailUrl ?? "", loaded: true, failed: false })} onError={() => setImageState({ src: event.thumbnailUrl ?? "", loaded: false, failed: true })} className={imageReady ? "is-loaded" : "is-loading"} />
+          </> : <div className="studio-event-card-placeholder"><Icons.Camera size={30} /></div>}
         </div>
         <div className="studio-event-card-content">
           <div className="studio-event-card-top"><span className={`studio-event-status studio-event-status-${event.status}`}>{event.status}</span><span className="studio-event-count"><Icons.Image size={14} /> {event.totalPhotos || 0} photos</span></div>
@@ -122,6 +130,7 @@ export function DashboardPage({ setView, showToast, auth, onAuth }: { setView: V
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(routeState.eventId);
   const [uploadingEventId, setUploadingEventId] = useState<string | null>(null);
+  const [coverUploadProgress, setCoverUploadProgress] = useState<Record<string, number>>({});
   const [uploadQueue, setUploadQueue] = useState<UploadItem[]>([]);
   const uploadQueueRef = useRef<UploadItem[]>([]);
   const uploadWorkersRef = useRef(0);
@@ -481,28 +490,47 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
 
   const uploadCoverForEvent = async (eventId: string, file: File) => {
     if (!ensureDriveConnected()) throw new Error("Google Drive is not connected");
-    const presign = await withRefresh((token) => createEventCoverUploadUrl(token, eventId, file.name, file.type));
+    const previewUrl = URL.createObjectURL(file);
+    const previous = events.find((event) => event.id === eventId)?.thumbnailUrl;
+    setEvents((current) => current.map((event) => event.id === eventId ? { ...event, thumbnailUrl: previewUrl } : event));
+    setCoverUploadProgress((current) => ({ ...current, [eventId]: 0 }));
+    try {
+    const optimizedFile = await optimizeImageForDirectUpload(file);
+    setCoverUploadProgress((current) => ({ ...current, [eventId]: 12 }));
+    const presign = await withRefresh((token) => createEventCoverUploadUrl(token, eventId, optimizedFile.name, optimizedFile.type || "image/jpeg"));
     const uploadUrl = presign.uploadUrl.startsWith("http")
       ? presign.uploadUrl
       : `${getApiBaseUrl()}${presign.uploadUrl}`;
-    const uploadRes = await withRefresh((token) => fetch(uploadUrl, {
-      method: "PUT",
-      body: file,
-      headers: {
-        ...(presign.requiredHeaders || {}),
-        "Content-Type": file.type || "application/octet-stream",
-        Authorization: `Bearer ${token}`,
-      }
-    }).then((res) => {
-      if (!res.ok) throw new Error(`Cover upload failed (${res.status})`);
-      return res;
+    setCoverUploadProgress((current) => ({ ...current, [eventId]: 20 }));
+    const uploadRes = await withRefresh((token) => new Promise<Response>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", uploadUrl);
+      for (const [key, value] of Object.entries(presign.requiredHeaders || {})) xhr.setRequestHeader(key, value);
+      xhr.setRequestHeader("Content-Type", optimizedFile.type || "application/octet-stream");
+      xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable) return;
+        const progress = Math.max(20, Math.min(90, Math.round(20 + event.loaded / event.total * 70)));
+        setCoverUploadProgress((current) => ({ ...current, [eventId]: progress }));
+      };
+      xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve(new Response(xhr.responseText, { status: xhr.status })) : reject(new Error(`Cover upload failed (${xhr.status})`));
+      xhr.onerror = () => reject(new Error("Network error during cover upload"));
+      xhr.send(optimizedFile);
     }));
-    if (!uploadRes.ok) throw new Error(`Cover upload failed (${uploadRes.status})`);
     const uploaded = await uploadRes.json().catch(() => ({} as { coverPhotoKey?: string }));
     const coverKey = uploaded.coverPhotoKey ?? presign.key;
+    setCoverUploadProgress((current) => ({ ...current, [eventId]: 95 }));
     const updatedEvent = await withRefresh((token) => updateEvent(token, eventId, { thumbnailUrl: coverKey }));
-    setEvents((prev) => prev.map((event) => event.id === eventId ? { ...event, ...updatedEvent } : event));
+    setEvents((prev) => prev.map((event) => event.id === eventId ? { ...event, ...updatedEvent, thumbnailUrl: updatedEvent.thumbnailUrl || previewUrl } : event));
+    URL.revokeObjectURL(previewUrl);
     showToast("Cover updated");
+    } catch (error) {
+      setEvents((current) => current.map((event) => event.id === eventId ? { ...event, thumbnailUrl: previous } : event));
+      URL.revokeObjectURL(previewUrl);
+      throw error;
+    } finally {
+      setCoverUploadProgress((current) => { const next = { ...current }; delete next[eventId]; return next; });
+    }
   };
 
   const handleCreateEvent = async () => {
@@ -649,7 +677,7 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
         ) : (
           <>
             <div className="flex items-center gap-2 text-orange-500 font-heading font-black text-xl">
-              <img src="/logo-mark.webp" alt="Chobi Dao" className="w-7 h-7 object-contain" />
+              <img src="/assets/chobidao.webp" alt="Chobi Dao" className="w-7 h-7 object-contain" />
               <span>Chobi dao</span>
             </div>
             <button 
@@ -696,7 +724,7 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
       <aside aria-label="Studio workspace" className="studio-sidebar hidden lg:flex sticky top-0 left-0 z-[70] h-screen bg-white/95 backdrop-blur-2xl border-r border-orange-100/50 p-6 flex-col gap-8 w-72 shrink-0">
         <div className="flex items-center gap-3 text-orange-500 font-heading font-black text-2xl px-2">
           <div className="w-10 h-10 rounded-2xl flex items-center justify-center bg-white shadow-clay-card border border-orange-100">
-            <img src="/logo-mark.webp" alt="Chobi Dao" className="w-8 h-8 object-contain" />
+            <img src="/assets/chobidao.webp" alt="Chobi Dao" className="w-8 h-8 object-contain" />
           </div>
           <span className="tracking-tight">Chobi dao</span>
         </div>
@@ -798,6 +826,7 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
               onEditDetails={handleStartEditEvent}
               handleSetThumbnail={handleSetThumbnail}
               uploadCoverForEvent={uploadCoverForEvent}
+              coverUploadProgress={coverUploadProgress[selectedEventId] ?? null}
               origin={origin}
               onPrint={() => setShowQrBannerModal(true)}
               onOpenGallery={() => router.push(`/dashboard/events/${encodeURIComponent(selectedEventId)}/photos`)}
@@ -806,10 +835,10 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
         ) : activeTab === "billing" ? null : (
           <div className="max-w-5xl mx-auto studio-events-workspace">
             {activeTab === "events" ? (
-              <div className="space-y-6">
-                <div className="studio-page-title"><div><p>YOUR STUDIO · WORKSPACE</p><h1>Events <span>{events.length}</span></h1><small>Your celebrations, beautifully organized.</small></div><button type="button" className="studio-create-event" onClick={handleOpenNewEvent}><Icons.Plus size={17} /> Create event</button></div>
-                {/* KPIs - Compact & Side-by-Side */}
-                  <div className="studio-events-kpis grid grid-cols-2 gap-3">
+              <div className="studio-events-content">
+                <div className="studio-events-heading-row">
+                  <div className="studio-page-title"><div><p>YOUR STUDIO · WORKSPACE</p><h1>Events <span>{events.length}</span></h1><small>Your celebrations, beautifully organized.</small></div></div>
+                  <div className="studio-events-kpis">
                   <ClayCard className="studio-kpi flex items-center gap-3 p-3 group hover:scale-[1.02] transition-all bg-white border-orange-100 shadow-clay-card relative overflow-hidden min-h-[80px]">
                     <div className="w-10 h-10 rounded-xl bg-orange-500 flex items-center justify-center text-white shadow-clay-pressed border-2 border-white group-hover:rotate-6 transition-transform relative z-10 flex-shrink-0">
                       <Icons.Camera size={18} />
@@ -830,9 +859,11 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
                     </div>
                     <Icons.Image className="absolute -right-4 -bottom-4 w-16 h-16 opacity-[0.03] rotate-12" />
                   </ClayCard>
+                  </div>
+                  <button type="button" className="studio-create-event" onClick={handleOpenNewEvent}><Icons.Plus size={17} /> Create event</button>
                 </div>
 
-                <div className="space-y-4">
+                <div className="studio-events-list">
 
                   {/* Search & Filters - Compact & Aligned */}
                   <div className="studio-search-bar flex flex-row gap-2 items-center p-1.5 bg-white rounded-2xl shadow-sm border border-orange-100/50" role="search">
@@ -891,11 +922,12 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
                 ) : filteredEvents.length === 0 ? (
                   <div className="studio-events-no-results"><Icons.Search size={22} /><strong>No events match those filters</strong><span>Try a different search or status.</span><button type="button" onClick={() => { setSearchQuery(""); setFilterStatus("all"); }}>Clear filters</button></div>
                 ) : (
-                  <div className="studio-events-grid grid grid-cols-1 md:grid-cols-2 gap-4" data-testid="events-list">
-                    {filteredEvents.map((event) => (
+                  <div className="studio-events-grid" data-testid="events-list">
+                    {filteredEvents.map((event, index) => (
                       <EventCard 
                         key={event.id} 
                         event={event} 
+                        imagePriority={index < 3}
                         onView={() => router.push(`/dashboard/events/${encodeURIComponent(event.id)}`)} 
                         onDelete={() => requestDeleteEvent(event.id)}
                       />

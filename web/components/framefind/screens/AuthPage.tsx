@@ -114,7 +114,7 @@ export function AuthPage({ setView, showToast, onAuth, initialMode = "login", on
   return (
     <main className="studio-auth" data-testid="auth-page">
       <section className="studio-auth-form-side">
-        <a className="studio-auth-mobile-brand" href="/" onClick={(event) => { event.preventDefault(); setView("landing"); }}><img src="/logo-mark.webp" alt="" />Chobi Dao <span>Studio</span></a>
+        <a className="studio-auth-mobile-brand" href="/" onClick={(event) => { event.preventDefault(); setView("landing"); }}><img src="/assets/chobidao.webp" alt="" />Chobi Dao <span>Studio</span></a>
         <button className="studio-auth-back" type="button" onClick={() => setView("landing")}><Icons.ChevronLeft size={16} /> Back to site</button>
         <div className="studio-auth-form-wrap">
           <div className="studio-auth-form-heading"><span className="studio-auth-overline">{verificationStep ? "EMAIL VERIFICATION" : "YOUR PHOTOGRAPHER ACCOUNT"}</span><h2>{verificationStep ? <>Check your<br />inbox<span className="studio-auth-period">.</span></> : mode === "login" ? <>Welcome<br />back<span className="studio-auth-period">.</span></> : <>A studio of<br />your own<span className="studio-auth-period">.</span></>}</h2><p>{verificationStep ? <>We sent a 6-digit code to <strong>{email}</strong>. Enter it below to finish creating your account.</> : mode === "login" ? "Sign in to manage your events and photo galleries." : "Create your photographer account and start sharing."}</p></div>

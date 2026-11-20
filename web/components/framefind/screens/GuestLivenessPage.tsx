@@ -348,7 +348,7 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
             onClick={() => router.push("/")}
             className="flex items-center gap-2 text-orange-600 font-serif font-bold text-xl sm:text-2xl hover:opacity-90 transition-opacity"
           >
-            <img src="/logo-mark.webp" alt="Chobi Dao" className="w-7 h-7 sm:w-8 sm:h-8 object-contain" />
+            <img src="/assets/chobidao.webp" alt="Chobi Dao" className="w-7 h-7 sm:w-8 sm:h-8 object-contain" />
             <span>Chobi dao</span>
           </button>
           <button
@@ -427,7 +427,7 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
           onClick={() => router.push("/")}
           className="flex items-center gap-2 text-orange-600 font-serif font-bold text-xl sm:text-2xl hover:opacity-90 transition-opacity"
         >
-          <img src="/logo-mark.webp" alt="Chobi Dao" className="w-7 h-7 sm:w-8 sm:h-8 object-contain" />
+          <img src="/assets/chobidao.webp" alt="Chobi Dao" className="w-7 h-7 sm:w-8 sm:h-8 object-contain" />
           <span>Chobi dao</span>
         </button>
 

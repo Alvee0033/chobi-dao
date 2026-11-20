@@ -17,6 +17,7 @@ export function EventDetailView({
   onEditDetails,
   handleSetThumbnail,
   uploadCoverForEvent,
+  coverUploadProgress = null,
   origin,
   onPrint,
   onOpenGallery
@@ -32,6 +33,7 @@ export function EventDetailView({
   onEditDetails: (event: EventPayload) => void;
   handleSetThumbnail: (eventId: string, url: string) => Promise<void>;
   uploadCoverForEvent: (eventId: string, file: File) => Promise<void>;
+  coverUploadProgress?: number | null;
   origin: string;
   onPrint: () => void;
   onOpenGallery: () => void;
@@ -202,14 +204,16 @@ export function EventDetailView({
                  <h3 className="text-base md:text-lg font-black text-charcoal flex items-center gap-2">
                    <Icons.Camera size={16} className="text-orange-500 md:w-[18px] md:h-[18px]" /> Cover Asset
                  </h3>
-                 <label className="text-[9px] md:text-[10px] font-black text-orange-500 uppercase tracking-widest hover:underline cursor-pointer">
-                    Change
+                 <label className={`text-[9px] md:text-[10px] font-black text-orange-500 uppercase tracking-widest ${coverUploadProgress !== null ? "cursor-wait opacity-70" : "hover:underline cursor-pointer"}`}>
+                    {coverUploadProgress !== null ? `Uploading ${coverUploadProgress}%` : "Change"}
                     <input 
                       type="file" 
                       className="hidden" 
                       accept="image/*"
+                      disabled={coverUploadProgress !== null}
                       onChange={(e) => {
                         const file = e.target.files?.[0];
+                        e.currentTarget.value = "";
                         if (file) {
                           uploadCoverForEvent(currentEvent.id, file).catch((error) =>
                             showToast(error instanceof Error ? error.message : "Cover upload failed")
@@ -228,6 +232,7 @@ export function EventDetailView({
                      <span className="text-[8px] md:text-[10px] font-black uppercase tracking-tighter opacity-30">No Cover Set</span>
                    </div>
                  )}
+                 {coverUploadProgress !== null && <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#281810]/45 text-white backdrop-blur-[2px]" role="status" aria-live="polite"><Icons.Loader size={22} className="animate-spin" /><span className="text-[10px] font-bold">Uploading cover · {coverUploadProgress}%</span><div className="h-1 w-2/3 overflow-hidden rounded-full bg-white/30"><span className="block h-full rounded-full bg-orange-300 transition-[width] duration-200" style={{ width: `${coverUploadProgress}%` }} /></div></div>}
                </div>
                <p className="text-[8px] md:text-[9px] text-muted font-bold mt-3 md:mt-4 italic leading-relaxed">
                  * This image represents your event in the portfolio grid and client login page.

@@ -59,7 +59,7 @@ export function GuestStartPage({ showToast }: { showToast: ShowToast }) {
 
   return (
     <main className="ff-find-page">
-      <header className="ff-find-header"><button onClick={() => router.push("/")} className="ff-find-brand" aria-label="Chobi Dao home"><img src="/logo-mark.webp" alt="" /> Chobi Dao</button><Link href="/auth" className="ff-find-for-studio">Photographer login <Icons.ArrowRight size={14} /></Link></header>
+      <header className="ff-find-header"><button onClick={() => router.push("/")} className="ff-find-brand" aria-label="Chobi Dao home"><img src="/assets/chobidao.webp" alt="" /> Chobi Dao</button><Link href="/auth" className="ff-find-for-studio">Photographer login <Icons.ArrowRight size={14} /></Link></header>
       <section className="ff-find-center" aria-labelledby="find-title">
         <span className="ff-find-eyebrow"><i /> YOUR EVENT, YOUR MOMENTS</span>
         <h1 id="find-title">Find your <em>photos.</em></h1>

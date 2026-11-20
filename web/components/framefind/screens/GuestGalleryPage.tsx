@@ -202,7 +202,7 @@ export function GuestGalleryPage({
       {/* Header */}
       <header className="flex justify-between items-center max-w-5xl w-full mx-auto py-4 mb-8 bg-white/60 backdrop-blur-xl px-6 rounded-3xl border border-orange-100/60 shadow-sm">
         <div className="flex items-center gap-3 text-orange-600 font-heading font-black text-2xl tracking-tight cursor-pointer" onClick={onStartOver}>
-          <img src="/logo-mark.webp" alt="Chobi Dao" className="w-9 h-9 object-contain drop-shadow-md" />
+          <img src="/assets/chobidao.webp" alt="Chobi Dao" className="w-9 h-9 object-contain drop-shadow-md" />
           <span>Chobi dao</span>
         </div>
         <button 

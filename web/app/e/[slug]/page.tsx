@@ -39,7 +39,7 @@ export default async function EventLandingPage({ params }: { params: { slug: str
             href="/" 
             className="absolute top-6 left-6 flex items-center gap-3 text-orange-600 font-heading font-black text-2xl hover:scale-105 transition-all drop-shadow-sm"
           >
-            <img src="/logo-mark.webp" alt="Chobi Dao" className="w-9 h-9 object-contain" />
+            <img src="/assets/chobidao.webp" alt="Chobi Dao" className="w-9 h-9 object-contain" />
             <span>Chobi dao</span>
           </Link>
 
@@ -77,7 +77,7 @@ export default async function EventLandingPage({ params }: { params: { slug: str
           href="/" 
           className="absolute top-6 left-6 flex items-center gap-3 text-orange-600 font-heading font-black text-2xl hover:scale-105 transition-all drop-shadow-sm"
         >
-          <img src="/logo-mark.webp" alt="Chobi Dao" className="w-9 h-9 object-contain" />
+          <img src="/assets/chobidao.webp" alt="Chobi Dao" className="w-9 h-9 object-contain" />
           <span>Chobi dao</span>
         </Link>
 

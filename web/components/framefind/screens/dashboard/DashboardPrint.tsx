@@ -115,7 +115,7 @@ export function QrBannerModal({
       qrImg.src = qrData;
       qrImg.onload = () => {
         const logoImg = new window.Image();
-        logoImg.src = "/logo.png";
+        logoImg.src = "/assets/chobidao.webp";
         logoImg.onload = () => {
           ctx.drawImage(logoImg, 312, 70, 48, 48);
           drawQrAndDownload();
@@ -207,7 +207,7 @@ export function QrBannerModal({
             
             <div className="text-center w-full">
               <div className="flex items-center justify-center gap-1 mb-2">
-                <img src="/logo-mark.webp" alt="Chobi Dao" className="w-4 h-4 object-contain" />
+                <img src="/assets/chobidao.webp" alt="Chobi Dao" className="w-4 h-4 object-contain" />
                 <h2 className="text-[10px] font-black text-charcoal tracking-tight uppercase">Chobi Dao</h2>
               </div>
               <h1 className="text-sm font-black text-charcoal mb-0.5 truncate uppercase px-2" title={event.name}>{event.name}</h1>
@@ -301,7 +301,7 @@ export function PrintableAccessCard({ event, qrData }: { event: EventPayload; qr
           <div className="text-center w-full">
             <div className="flex items-center justify-center gap-4 mb-8">
               <div className="w-20 h-20 bg-orange-500 rounded-3xl flex items-center justify-center shadow-xl p-3">
-                <img src="/logo.png" alt="Chobi Dao logo" className="w-full h-full object-contain" />
+                <img src="/assets/chobidao.webp" alt="Chobi Dao logo" className="w-full h-full object-contain" />
               </div>
               <h2 className="text-6xl font-black text-charcoal tracking-tighter">Chobi Dao</h2>
             </div>
@@ -317,7 +317,7 @@ export function PrintableAccessCard({ event, qrData }: { event: EventPayload; qr
               <img src={qrData} alt="QR Code" className="w-[400px] h-[400px]" />
             </div>
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-white rounded-3xl shadow-2xl border-4 border-orange-500 flex items-center justify-center">
-               <img src="/logo-mark.webp" alt="Chobi Dao logo" className="w-12 h-12 object-contain" />
+               <img src="/assets/chobidao.webp" alt="Chobi Dao logo" className="w-12 h-12 object-contain" />
             </div>
           </div>
 

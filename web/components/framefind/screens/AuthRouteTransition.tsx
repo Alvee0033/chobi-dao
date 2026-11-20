@@ -6,7 +6,7 @@ export function AuthRouteTransition({ message = "Checking your studio" }: { mess
     <main className="auth-route-transition" role="status" aria-live="polite">
       <div className="auth-route-transition-content">
         <div className="auth-route-transition-brand">
-          <Image src="/logo-mark.webp" width={40} height={40} alt="" priority />
+          <Image src="/assets/chobidao.webp" width={40} height={40} alt="" priority />
           <span>Chobi Dao</span>
         </div>
         <div className="auth-route-transition-progress" aria-hidden="true"><span /></div>
