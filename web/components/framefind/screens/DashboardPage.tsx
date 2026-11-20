@@ -56,7 +56,7 @@ function NavItem({
   return (
     <button
       onClick={() => setActiveTab(id)}
-      className={`flex items-center gap-3 px-4 py-3 rounded-2xl font-black text-sm transition-all duration-300 ${
+      className={`studio-nav-item flex items-center gap-3 px-4 py-3 rounded-2xl font-black text-sm transition-all duration-300 ${
         isActive 
           ? "bg-orange-500 text-white shadow-clay-pressed scale-[1.02]" 
           : "text-muted hover:bg-orange-50 hover:text-orange-500"
@@ -602,7 +602,7 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
   return (
     <div className="studio-dashboard min-h-screen flex bg-[#faf9f6] w-full relative z-10 font-sans" data-testid="dashboard-page">
       {/* Mobile Header (Dynamic & Context-aware) */}
-      <header className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-xl border-b border-orange-100 z-[60] px-4 flex items-center justify-between">
+      <header className="studio-mobile-header lg:hidden fixed top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-xl border-b border-orange-100 z-[60] px-4 flex items-center justify-between">
         {selectedEventId ? (
           <>
             <button 
@@ -665,8 +665,7 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
       </header>
 
       {/* Mobile Bottom Navigation Bar */}
-      <div 
-        className={`lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-white/90 backdrop-blur-xl border-t border-orange-100 flex items-center justify-around px-6 z-[60] transition-transform duration-300 ${
+      <nav aria-label="Dashboard navigation" className={`studio-mobile-nav lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-white/90 backdrop-blur-xl border-t border-orange-100 flex items-center justify-around px-6 z-[60] transition-transform duration-300 ${
           selectedEventId ? 'translate-y-full' : 'translate-y-0 shadow-[0_-4px_16px_rgba(249,115,22,0.06)]'
         }`}
       >
@@ -693,10 +692,10 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
             </button>
           );
         })}
-      </div>
+      </nav>
 
       {/* Sidebar - Desktop Only */}
-      <aside className="studio-sidebar hidden lg:flex sticky top-0 left-0 z-[70] h-screen bg-white/95 backdrop-blur-2xl border-r border-orange-100/50 p-6 flex-col gap-8 w-72 shrink-0">
+      <aside aria-label="Studio workspace" className="studio-sidebar hidden lg:flex sticky top-0 left-0 z-[70] h-screen bg-white/95 backdrop-blur-2xl border-r border-orange-100/50 p-6 flex-col gap-8 w-72 shrink-0">
         <div className="flex items-center gap-3 text-orange-500 font-heading font-black text-2xl px-2">
           <div className="w-10 h-10 rounded-2xl flex items-center justify-center bg-white shadow-clay-card border border-orange-100">
             <img src="/logo-mark.webp" alt="Chobi Dao" className="w-8 h-8 object-contain" />
@@ -726,7 +725,8 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
            )}
         </div>
 
-        <nav className="flex flex-col gap-2 flex-1 px-1">
+        <nav aria-label="Dashboard navigation" className="studio-sidebar-nav flex flex-col gap-2 flex-1 px-1">
+          <span className="studio-nav-caption">Workspace</span>
           <NavItem id="events" Icon={Icons.Camera} label="Events" activeTab={activeTab} setActiveTab={handleTabChange} />
           <NavItem id="analytics" Icon={Icons.BarChart} label="Analytics" activeTab={activeTab} setActiveTab={handleTabChange} />
           <NavItem id="billing" Icon={Icons.Lock} label="Plan & billing" activeTab={activeTab} setActiveTab={handleTabChange} />
@@ -807,21 +807,9 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
           )
         ) : activeTab === "billing" ? null : (
           <div className="max-w-5xl mx-auto">
-            {/* Floating Action Button */}
-            {activeTab === "events" && (
-                <div className="fixed bottom-8 right-8 z-50">
-                 <ClayButton
-                  onClick={handleOpenNewEvent}
-                  className="shadow-2xl !rounded-full !w-16 !h-16 !p-0 ring-4 ring-orange-100 flex items-center justify-center hover:scale-110 active:scale-95 transition-all bg-orange-500 text-white"
-                >
-                  <Icons.Plus size={32} />
-                </ClayButton>
-              </div>
-            )}
-
             {activeTab === "events" ? (
               <div className="space-y-6">
-                <div className="studio-page-title"><div><p>Workspace / Events</p><h1>Events <span>{events.length}</span></h1></div></div>
+                <div className="studio-page-title"><div><p>YOUR STUDIO · WORKSPACE</p><h1>Events <span>{events.length}</span></h1><small>Your celebrations, beautifully organized.</small></div><button type="button" className="studio-create-event" onClick={handleOpenNewEvent}><Icons.Plus size={17} /> Create event</button></div>
                 {/* KPIs - Compact & Side-by-Side */}
                 <div className="grid grid-cols-2 lg:grid-cols-2 gap-3">
                   <ClayCard className="studio-kpi flex items-center gap-3 p-3 group hover:scale-[1.02] transition-all bg-white border-orange-100 shadow-clay-card relative overflow-hidden min-h-[80px]">

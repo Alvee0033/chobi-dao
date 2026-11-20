@@ -7,7 +7,8 @@ import type { SettingsState } from "./model";
 
 export function SettingsSection({ auth, settingsState, setSettingsState, showToast }: { auth: DashboardAuthState | null; settingsState: SettingsState; setSettingsState: Dispatch<SetStateAction<SettingsState>>; showToast: ShowToast }) {
   return (
-    <div className="max-w-3xl space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="cd-settings max-w-3xl space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <header className="cd-section-heading"><span>STUDIO PREFERENCES</span><h1>Settings</h1><p>Manage your photographer profile and workspace preferences.</p></header>
       <ClayCard className="p-8 border-orange-100 shadow-clay-card">
          <div className="flex items-center gap-8 mb-10">
            <div className="w-24 h-24 rounded-[32px] bg-orange-500 flex items-center justify-center text-white text-4xl font-black shadow-clay-pressed border-4 border-white relative group shrink-0">
@@ -21,10 +22,7 @@ export function SettingsSection({ auth, settingsState, setSettingsState, showToa
              <p className="text-muted font-bold text-sm mb-4 truncate">{auth?.email || "No email linked"}</p>
              <div className="flex gap-2">
                 <span className="px-3 py-1 rounded-full bg-orange-500 text-white text-[10px] font-black uppercase tracking-widest shadow-clay-pressed">
-                  Pro Plan
-                </span>
-                <span className="px-3 py-1 rounded-full bg-white text-charcoal text-[10px] font-black uppercase tracking-widest shadow-clay-card border border-orange-100">
-                  Verified
+                  {auth?.plan || "Free"} Plan
                 </span>
              </div>
            </div>

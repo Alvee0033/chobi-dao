@@ -25,14 +25,15 @@ export function AnalyticsSection({ analyticsData, isLoadingAnalytics }: { analyt
     const maxVal = Math.max(...data.monthlyViews, ...data.monthlyInteractions, 10);
 
     return (
-      <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="cd-analytics space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <header className="cd-section-heading"><span>STUDIO PERFORMANCE</span><h1>Analytics</h1><p>A clear view of how your event galleries are reaching people.</p></header>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {[
             { label: "Total Views", value: data.totalViews.toLocaleString(), icon: Icons.Eye, color: "bg-blue-500", trend: data.trends.views },
             { label: "Unique Users", value: data.uniqueUsers.toLocaleString(), icon: Icons.Users, color: "bg-purple-500", trend: data.trends.users },
             { label: "Photos Delivered", value: data.photosDelivered.toLocaleString(), icon: Icons.Image, color: "bg-green-500", trend: data.trends.photos }
           ].map((stat, i) => (
-            <ClayCard key={i} className="p-6 border-orange-100 shadow-clay-card hover:scale-[1.02] transition-all group overflow-hidden relative">
+            <ClayCard key={i} className="cd-analytics-stat p-6 border-orange-100 shadow-clay-card transition-all group overflow-hidden relative">
               <div className="flex items-center gap-4 relative z-10">
                 <div className={`w-12 h-12 rounded-xl ${stat.color} flex items-center justify-center text-white shadow-clay-pressed group-hover:rotate-6 transition-transform`}>
                   <stat.icon className="w-6 h-6" />
@@ -50,7 +51,7 @@ export function AnalyticsSection({ analyticsData, isLoadingAnalytics }: { analyt
           ))}
         </div>
 
-        <ClayCard className="p-8 border-orange-100 shadow-clay-card bg-white overflow-hidden relative">
+        <ClayCard className="cd-analytics-chart p-8 border-orange-100 shadow-clay-card bg-white overflow-hidden relative">
           <div className="flex justify-between items-end mb-10">
             <div>
               <h3 className="text-xl font-black text-charcoal mb-1">Growth & Traffic</h3>
