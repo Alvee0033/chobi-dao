@@ -6,6 +6,7 @@ import { useAuth } from "@/components/framefind/AuthProvider";
 import { AuthPage } from "@/components/framefind/screens/AuthPage";
 import { BackgroundBlobs } from "@/components/framefind/ui/BackgroundBlobs";
 import { Toast } from "@/components/framefind/ui/Toast";
+import { AuthRouteTransition } from "@/components/framefind/screens/AuthRouteTransition";
 
 export default function SignupRoute() {
   const { auth, isLoading, login } = useAuth();
@@ -16,13 +17,7 @@ export default function SignupRoute() {
     if (!isLoading && auth) router.replace("/dashboard");
   }, [auth, isLoading, router]);
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-orange-50">
-        <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
+  if (isLoading || auth) return <AuthRouteTransition message={auth ? "Opening your studio" : "Checking your studio"} />;
 
   return (
     <div className="min-h-screen relative font-sans selection:bg-orange-200 selection:text-orange-900">

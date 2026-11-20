@@ -1,0 +1,12 @@
+.auth-route-transition{display:grid;min-height:100svh;place-items:center;overflow:hidden;background:radial-gradient(ellipse at 50% 42%,#fff0e2 0%,#fff0e200 40%),linear-gradient(145deg,#fffaf4,#f8f1e8);color:#39261c}
+.auth-route-transition-content{display:grid;justify-items:center;gap:20px;min-width:220px;padding:28px 35px;animation:auth-route-enter .28s ease-out both}
+.auth-route-transition-brand{display:flex;align-items:center;gap:10px;font:700 22px Georgia,serif;letter-spacing:-.045em}
+.auth-route-transition-brand img{object-fit:contain;filter:drop-shadow(0 5px 10px #d45b2330)}
+.auth-route-transition-progress{width:92px;height:3px;overflow:hidden;border-radius:99px;background:#f0dfd0}
+.auth-route-transition-progress span{display:block;width:42%;height:100%;border-radius:inherit;background:linear-gradient(90deg,#f6a251,#df5f24);animation:auth-route-progress 1.1s cubic-bezier(.4,0,.6,1) infinite}
+.auth-route-transition-content p{margin:0;color:#987c69;font-size:11px;font-weight:500;line-height:1.4;letter-spacing:.04em}
+.auth-route-transition-dots{display:inline-block;width:16px;overflow:hidden;vertical-align:bottom;animation:auth-route-dots 1.15s steps(4,end) infinite}
+@keyframes auth-route-enter{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+@keyframes auth-route-progress{0%{transform:translateX(-130%)}100%{transform:translateX(340%)}}
+@keyframes auth-route-dots{from{width:0}to{width:16px}}
+@media(prefers-reduced-motion:reduce){.auth-route-transition-content,.auth-route-transition-progress span,.auth-route-transition-dots{animation:none}.auth-route-transition-progress span{width:100%}}
