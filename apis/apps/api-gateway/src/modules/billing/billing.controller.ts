@@ -57,4 +57,9 @@ export class BillingController {
     }
   }
 
+  @Get("uddoktapay/cancel")
+  uddoktapayCancel(@Res() response: any) {
+    const appUrl = parseEnv().APP_BASE_URL.replace(/\/$/, "");
+    return response.redirect(`${appUrl}/dashboard/billing?billing=cancelled`);
+  }
 }
