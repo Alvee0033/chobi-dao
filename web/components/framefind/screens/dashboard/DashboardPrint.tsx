@@ -111,8 +111,6 @@ export function QrBannerModal({
 
       // Load and draw QR + app logo
       const qrImg = new window.Image();
-      qrImg.crossOrigin = "anonymous";
-      qrImg.src = qrData;
       qrImg.onload = () => {
         const logoImg = new window.Image();
         logoImg.src = "/assets/chobidao.webp";
@@ -124,6 +122,8 @@ export function QrBannerModal({
           drawQrAndDownload();
         };
       };
+      qrImg.onerror = () => showToast("Failed to load the event QR image");
+      qrImg.src = qrData;
 
       const drawQrAndDownload = () => {
         ctx.fillStyle = "#fff8f1";
@@ -151,21 +151,6 @@ export function QrBannerModal({
         ctx.stroke();
 
         ctx.drawImage(qrImg, 230, 360, 340, 340);
-
-        ctx.fillStyle = "#ffffff";
-        ctx.beginPath();
-        ctx.arc(400, 530, 35, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.lineWidth = 4;
-        ctx.strokeStyle = "#f97316";
-        ctx.stroke();
-
-        ctx.fillStyle = "#f97316";
-        ctx.beginPath();
-        ctx.arc(400, 532, 10, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillRect(388, 518, 24, 6);
 
         const url = canvas.toDataURL("image/png");
         const a = document.createElement("a");
@@ -315,9 +300,6 @@ export function PrintableAccessCard({ event, qrData }: { event: EventPayload; qr
           <div className="relative group p-10 bg-orange-50 rounded-[60px] border-4 border-orange-100 shadow-inner">
             <div className="p-8 bg-white rounded-[40px] shadow-2xl border-2 border-orange-200">
               <img src={qrData} alt="QR Code" className="w-[400px] h-[400px]" />
-            </div>
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-white rounded-3xl shadow-2xl border-4 border-orange-500 flex items-center justify-center">
-               <img src="/assets/chobidao.webp" alt="Chobi Dao logo" className="w-12 h-12 object-contain" />
             </div>
           </div>
 

@@ -5,7 +5,7 @@ import { Icons } from "../../icons";
 import type { ShowToast } from "../../types";
 import { ClayButton } from "../../ui/ClayButton";
 import { ClayCard } from "../../ui/ClayCard";
-import { localPreviewCache, type UploadItem } from "./model";
+import { localPreviewCache, type UploadItem, type UploadSummary } from "./model";
 
 const GalleryPhotoCard = memo(function GalleryPhotoCard({
   photo,
@@ -132,6 +132,7 @@ export function PhotoGalleryView({
   handleSetThumbnail,
   uploadingEventId,
   uploadQueue,
+  uploadSummary,
   cancelUpload,
   retryUpload,
   onSharePerson,
@@ -145,6 +146,7 @@ export function PhotoGalleryView({
   handleSetThumbnail: (eventId: string, url: string) => Promise<void>;
   uploadingEventId: string | null;
   uploadQueue: UploadItem[];
+  uploadSummary?: UploadSummary;
   cancelUpload: (uploadId: string) => void;
   retryUpload: (uploadId: string) => void;
   onSharePerson?: (personId: string) => void;
@@ -242,7 +244,7 @@ export function PhotoGalleryView({
       (item) =>
           item.eventId === eventId &&
           item.status !== "ready" &&
-          (!item.photoId || !existingPhotoIds.has(item.photoId))
+          (item.status === "failed" || !item.photoId || !existingPhotoIds.has(item.photoId))
     );
   }, [uploadQueue, eventId, photos]);
 
@@ -256,7 +258,7 @@ export function PhotoGalleryView({
     const id = window.setInterval(() => {
       loadPhotos(true);
       loadPeople(true);
-    }, 1500);
+    }, 6000);
     return () => window.clearInterval(id);
   }, [eventUploads, eventId, selectedPersonId]);
 
@@ -302,10 +304,11 @@ export function PhotoGalleryView({
           </div>
         </div>
 
-        <label className="relative cursor-pointer group ml-auto lg:ml-0">
+        <div className="flex items-center gap-2 ml-auto lg:ml-0">
+        <label className="relative cursor-pointer group">
           <input
             type="file"
-            accept="image/*"
+            accept="image/jpeg,image/png,image/webp"
             multiple
             onChange={(e) => {
               const files = e.target.files;
@@ -323,7 +326,38 @@ export function PhotoGalleryView({
             {uploadingEventId === eventId ? "Uploading..." : "Add Photos"}
           </div>
         </label>
+        <label className="cursor-pointer rounded-2xl border border-orange-200 bg-white px-4 py-3 text-sm font-bold text-orange-700 transition-colors hover:bg-orange-50">
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            multiple
+            {...{ webkitdirectory: "", directory: "" }}
+            onChange={(e) => {
+              const files = e.target.files;
+              if (files) enqueuePhotoUploads(eventId, Array.from(files));
+              e.currentTarget.value = "";
+            }}
+            className="hidden"
+          />
+          Add folder
+        </label>
+        </div>
       </header>
+
+      {uploadSummary && uploadSummary.total > 0 && (
+        <div className="mb-6 rounded-2xl border border-orange-200 bg-white px-5 py-4 shadow-sm" role="status" aria-live="polite">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+            <strong className="text-charcoal">
+              {uploadSummary.preparing > 0 ? `Preparing ${uploadSummary.preparing} photos…` : uploadSummary.uploaded + uploadSummary.failed < uploadSummary.total ? "Uploading photos…" : "Upload finished"}
+            </strong>
+            <span className="font-semibold text-orange-700">{uploadSummary.uploaded} of {uploadSummary.total} uploaded{uploadSummary.failed ? ` · ${uploadSummary.failed} need retry` : ""}</span>
+          </div>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-orange-100" aria-hidden="true">
+            <div className="h-full rounded-full bg-orange-500 transition-[width] duration-300" style={{ width: `${Math.round((uploadSummary.uploaded / uploadSummary.total) * 100)}%` }} />
+          </div>
+          <p className="mt-2 text-xs text-muted">You can keep using the dashboard while photos upload. Face matching continues after each upload.</p>
+        </div>
+      )}
 
       <div className="mb-6">
         <div className="flex items-center gap-3 overflow-x-auto overflow-y-visible pb-2 px-0.5">

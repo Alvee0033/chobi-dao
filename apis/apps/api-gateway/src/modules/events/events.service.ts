@@ -13,12 +13,12 @@ export class EventsService {
   private readonly env = parseEnv();
   constructor(private readonly prisma: PrismaService, private readonly storage: ObjectStorageService) {}
   private readonly qrStyle = {
-    errorCorrectionLevel: "M" as const,
-    margin: 1,
+    errorCorrectionLevel: "H" as const,
+    margin: 4,
     width: 640,
     color: {
-      dark: "#F97316",
-      light: "#FFF8F1"
+      dark: "#21170F",
+      light: "#FFFFFF"
     }
   };
 
@@ -48,7 +48,7 @@ export class EventsService {
     return {
       ...withDisplay,
       publicUrl: `/e/${event.slug}`,
-      qr: await this.buildQr(`/e/${event.slug}`)
+      qr: await this.buildQr(event.slug)
     };
   }
 
@@ -142,7 +142,7 @@ export class EventsService {
 
   async qr(photographerId: string, id: string) {
     const event = await this.get(photographerId, id);
-    return this.buildQr(`/e/${event.slug}`);
+    return this.buildQr(event.slug);
   }
 
   async publicLanding(slug: string) {
@@ -170,7 +170,8 @@ export class EventsService {
     };
   }
 
-  private async buildQr(url: string) {
+  private async buildQr(slug: string) {
+    const url = new URL(`/e/${encodeURIComponent(slug)}`, this.env.APP_BASE_URL).toString();
     const dataUrl = await QRCode.toDataURL(url, this.qrStyle);
     const pngBase64 = dataUrl.replace(/^data:image\/png;base64,/, "");
     return { url, pngBase64 };

@@ -12,4 +12,11 @@ export type UploadItem = {
   abort?: AbortController;
 };
 
+export type UploadSummary = {
+  total: number;
+  preparing: number;
+  uploaded: number;
+  failed: number;
+};
+
 export const localPreviewCache: Record<string, string> = {};

@@ -8,7 +8,7 @@ import type { DashboardAuthState, ShowToast, ViewSetter } from "../types";
 import { ClayButton } from "../ui/ClayButton";
 import { ClayCard } from "../ui/ClayCard";
 import "./dashboard-page.css";
-import { localPreviewCache, type UploadItem } from "./dashboard/model";
+import { localPreviewCache, type UploadItem, type UploadSummary } from "./dashboard/model";
 
 function DashboardViewLoading() {
   return <div className="flex items-center justify-center gap-3 py-20 text-sm font-bold text-orange-700" role="status"><Icons.Loader size={20} className="animate-spin" /> Loading workspace…</div>;
@@ -132,10 +132,15 @@ export function DashboardPage({ setView, showToast, auth, onAuth }: { setView: V
   const [uploadingEventId, setUploadingEventId] = useState<string | null>(null);
   const [coverUploadProgress, setCoverUploadProgress] = useState<Record<string, number>>({});
   const [uploadQueue, setUploadQueue] = useState<UploadItem[]>([]);
+  const [uploadSummaries, setUploadSummaries] = useState<Record<string, UploadSummary>>({});
   const uploadQueueRef = useRef<UploadItem[]>([]);
   const uploadWorkersRef = useRef(0);
   const claimedUploadsRef = useRef<Set<string>>(new Set());
-const MAX_PARALLEL_UPLOADS = 4;
+  const uploadFailureNotifiedRef = useRef<Set<string>>(new Set());
+const MAX_PARALLEL_UPLOADS = 2;
+const UPLOAD_ENQUEUE_CHUNK = 40;
+const MAX_PHOTO_BYTES = 100 * 1024 * 1024;
+const MAX_LOCAL_PREVIEWS = 24;
 const DIRECT_UPLOAD_MAX_BYTES = 2.5 * 1024 * 1024;
 
 async function optimizeImageForDirectUpload(file: File): Promise<File> {
@@ -358,8 +363,13 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
       setUploadingEventId(next.eventId);
 
       (async () => {
+        let completed = false;
+        let canceled = false;
+        let keepPreview = false;
         try {
-          const uploadFile = await optimizeImageForDirectUpload(next.file);
+          // Keep full resolution and avoid expensive canvas work on the UI thread for large batches.
+          const uploadFile = next.file;
+          if (controller.signal.aborted) throw new Error("Upload canceled");
           const presign = await withRefresh((token) =>
             createUploadUrl(
               token,
@@ -371,18 +381,22 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
           );
 
           setUploadQueue((prev) => prev.map((item) => item.id === uploadId ? { ...item, photoId: presign.photoId } : item));
-          if (presign.photoId && next.previewObjectUrl) {
-            localPreviewCache[presign.photoId] = next.previewObjectUrl;
-          }
+          if (controller.signal.aborted) throw new Error("Upload canceled");
 
           await new Promise<void>((resolve, reject) => {
             const xhr = new XMLHttpRequest();
+            let lastProgressAt = 0;
+            let lastProgress = 0;
             xhr.open("PUT", presign.uploadUrl);
             const headerEntries = Object.entries(presign.requiredHeaders || {});
             for (const [key, value] of headerEntries) xhr.setRequestHeader(key, value);
             xhr.upload.onprogress = (evt) => {
               if (!evt.lengthComputable) return;
               const progress = Math.max(1, Math.min(99, Math.round((evt.loaded / evt.total) * 100)));
+              const now = performance.now();
+              if (progress - lastProgress < 5 && now - lastProgressAt < 250) return;
+              lastProgress = progress;
+              lastProgressAt = now;
               setUploadQueue((prev) => prev.map((item) => item.id === uploadId ? { ...item, progress } : item));
             };
             xhr.onload = () => {
@@ -399,10 +413,21 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
 
           setUploadQueue((prev) => prev.map((item) => item.id === uploadId ? { ...item, status: "processing", progress: 100 } : item));
           await withRefresh((token) => finalizeUpload(token, next.eventId, [presign.photoId]));
+          completed = true;
+          if (Object.keys(localPreviewCache).length < MAX_LOCAL_PREVIEWS) {
+            localPreviewCache[presign.photoId] = next.previewObjectUrl;
+            keepPreview = true;
+          }
+          setUploadSummaries((prev) => ({ ...prev, [next.eventId]: { ...prev[next.eventId], uploaded: (prev[next.eventId]?.uploaded ?? 0) + 1 } }));
         } catch (error) {
           const msg = error instanceof Error ? error.message : "Upload failed";
-          setUploadQueue((prev) => prev.map((item) => item.id === uploadId ? { ...item, status: msg.includes("canceled") ? "canceled" : "failed", error: msg } : item));
-          if (!msg.includes("canceled")) showToast(`Upload failed: ${msg}`);
+          canceled = msg.includes("canceled");
+          setUploadQueue((prev) => prev.map((item) => item.id === uploadId ? { ...item, status: canceled ? "canceled" : "failed", error: msg } : item));
+          setUploadSummaries((prev) => ({ ...prev, [next.eventId]: { ...prev[next.eventId], failed: (prev[next.eventId]?.failed ?? 0) + 1 } }));
+          if (!canceled && !uploadFailureNotifiedRef.current.has(next.eventId)) {
+            uploadFailureNotifiedRef.current.add(next.eventId);
+            showToast(`Some photos could not upload: ${msg}. Retry them in the gallery.`);
+          }
         } finally {
           claimedUploadsRef.current.delete(uploadId);
           uploadWorkersRef.current -= 1;
@@ -410,7 +435,10 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
             setUploadingEventId(null);
             withRefresh((token) => getEvents(token)).then(setEvents).catch(() => {});
           }
-          setUploadQueue((prev) => prev.filter((item) => item.id !== uploadId));
+          if (completed || canceled) {
+            setUploadQueue((prev) => prev.filter((item) => item.id !== uploadId));
+            if (!keepPreview) window.setTimeout(() => URL.revokeObjectURL(next.previewObjectUrl), 1000);
+          }
           // Trigger next in queue
           void runUploadWorkers();
         }
@@ -428,19 +456,33 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
   const enqueuePhotoUploads = (eventId: string, files: File[]) => {
     if (!ensureDriveConnected()) return;
     if (!files.length) return;
-    setUploadQueue((prev) => [
-      ...prev,
-      ...files.map((file) => ({
-        id: crypto.randomUUID(),
-        eventId,
-        file,
-        fileName: file.name,
-        previewObjectUrl: URL.createObjectURL(file),
-        progress: 0,
-        status: "queued" as const
-      }))
-    ]);
-    showToast(`Queued ${files.length} file${files.length > 1 ? "s" : ""}`);
+    const acceptedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+    const accepted = files.filter((file) => acceptedTypes.has(file.type) && file.size > 0 && file.size <= MAX_PHOTO_BYTES);
+    const skipped = files.length - accepted.length;
+    if (!accepted.length) {
+      showToast("No supported photos selected. Use JPG, PNG, or WebP files up to 100 MB each.");
+      return;
+    }
+    uploadFailureNotifiedRef.current.delete(eventId);
+    setUploadSummaries((prev) => {
+      const current = prev[eventId] ?? { total: 0, preparing: 0, uploaded: 0, failed: 0 };
+      return { ...prev, [eventId]: { ...current, total: current.total + accepted.length, preparing: current.preparing + accepted.length } };
+    });
+    showToast(`${accepted.length} photo${accepted.length === 1 ? "" : "s"} added${skipped ? ` · ${skipped} unsupported or oversized skipped` : ""}`);
+    let offset = 0;
+    const appendChunk = () => {
+      const chunk = accepted.slice(offset, offset + UPLOAD_ENQUEUE_CHUNK);
+      if (!chunk.length) return;
+      offset += chunk.length;
+      const items: UploadItem[] = chunk.map((file) => ({
+        id: crypto.randomUUID(), eventId, file, fileName: file.name,
+        previewObjectUrl: URL.createObjectURL(file), progress: 0, status: "queued"
+      }));
+      setUploadQueue((prev) => [...prev, ...items]);
+      setUploadSummaries((prev) => ({ ...prev, [eventId]: { ...prev[eventId], preparing: Math.max(0, (prev[eventId]?.preparing ?? 0) - chunk.length) } }));
+      if (offset < accepted.length) window.setTimeout(appendChunk, 0);
+    };
+    window.setTimeout(appendChunk, 0);
   };
 
   const cancelUpload = (uploadId: string) => {
@@ -453,6 +495,10 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
   };
 
   const retryUpload = (uploadId: string) => {
+    const item = uploadQueueRef.current.find((entry) => entry.id === uploadId);
+    if (item?.status === "failed") {
+      setUploadSummaries((prev) => ({ ...prev, [item.eventId]: { ...prev[item.eventId], failed: Math.max(0, (prev[item.eventId]?.failed ?? 0) - 1) } }));
+    }
     claimedUploadsRef.current.delete(uploadId);
     setUploadQueue((prev) => prev.map((item) => item.id === uploadId ? { ...item, status: "queued", progress: 0, error: undefined } : item));
   };
@@ -806,6 +852,7 @@ async function optimizeImageForDirectUpload(file: File): Promise<File> {
               handleSetThumbnail={handleSetThumbnail}
               uploadingEventId={uploadingEventId}
               uploadQueue={uploadQueue}
+              uploadSummary={uploadSummaries[selectedEventId]}
               cancelUpload={cancelUpload}
               retryUpload={retryUpload}
               onSharePerson={handleSharePerson}

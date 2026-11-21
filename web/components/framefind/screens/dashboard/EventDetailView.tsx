@@ -43,26 +43,27 @@ export function EventDetailView({
   const [detailEvent, setDetailEvent] = useState<EventPayload | null>(null);
   const [indexStatus, setIndexStatus] = useState<EventIndexStatus | null>(null);
   const [qrData, setQrData] = useState<string>("");
+  const [qrError, setQrError] = useState(false);
 
   useEffect(() => {
     let active = true;
     const load = async () => {
-      try {
-        const [ev, stats, qr] = await Promise.all([
+      setQrData("");
+      setQrError(false);
+      const [eventResult, statusResult, qrResult] = await Promise.allSettled([
           withRefresh((token) => getEvent(token, eventId)),
           withRefresh((token) => getEventIndexStatus(token, eventId)),
           withRefresh((token) => getEventQr(token, eventId))
-        ]);
-        if (!active) return;
-        setDetailEvent(ev);
-        setIndexStatus(stats);
-        
-        // Handle case where base64 might already have prefix
-        const rawData = qr.pngBase64;
+      ]);
+      if (!active) return;
+      if (eventResult.status === "fulfilled") setDetailEvent(eventResult.value);
+      if (statusResult.status === "fulfilled") setIndexStatus(statusResult.value);
+      if (qrResult.status === "fulfilled") {
+        const rawData = qrResult.value.pngBase64;
         const formattedQr = rawData.startsWith("data:") ? rawData : `data:image/png;base64,${rawData}`;
         setQrData(formattedQr);
-      } catch (error) {
-        showToast(error instanceof Error ? error.message : "Failed to load event details");
+      } else {
+        setQrError(true);
       }
     };
     load();
@@ -257,23 +258,22 @@ export function EventDetailView({
                  {qrData ? (
                    <div className="relative p-3 md:p-4 bg-white rounded-2xl md:rounded-3xl shadow-clay-pressed border border-orange-100">
                      <img src={qrData} alt={`QR for ${currentEvent.slug}`} className="w-32 h-32 md:w-40 md:h-40 object-contain" />
-                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 md:w-10 md:h-10 bg-white rounded-lg md:rounded-xl shadow-lg border-2 border-orange-500 flex items-center justify-center">
-                        <Icons.Camera className="text-orange-500 w-4 h-4 md:w-5 md:h-5" />
-                     </div>
                    </div>
                  ) : (
-                   <div className="w-40 h-40 md:w-48 md:h-48 bg-white/50 rounded-2xl md:rounded-3xl flex items-center justify-center text-orange-200 border border-orange-100/50 animate-pulse">
+                   <div className="w-40 h-40 md:w-48 md:h-48 bg-white/50 rounded-2xl md:rounded-3xl flex items-center justify-center text-orange-200 border border-orange-100/50">
                      <Icons.QrCode size={64} className="opacity-20 md:w-20 md:h-20" />
                    </div>
                  )}
               </div>
+              {qrError && <p className="mb-3 text-center text-xs font-semibold text-red-700">QR could not load. Refresh this page to try again.</p>}
               
               <div className="space-y-2 md:space-y-3">
-                 <ClayButton onClick={downloadQr} className="w-full !rounded-xl md:!rounded-2xl !py-3 md:!py-4 font-black shadow-clay-pressed text-xs md:text-sm">
+                 <ClayButton onClick={downloadQr} disabled={!qrData} className="w-full !rounded-xl md:!rounded-2xl !py-3 md:!py-4 font-black shadow-clay-pressed text-xs md:text-sm">
                    Download QR Kit
                  </ClayButton>
                  <button 
                    onClick={onPrint} 
+                   disabled={!qrData}
                    className="w-full py-1.5 md:py-2 text-[9px] md:text-[11px] font-black uppercase tracking-widest text-muted hover:text-orange-500 transition-colors flex items-center justify-center gap-2 border border-orange-100 rounded-xl hover:bg-orange-50/50"
                  >
                    <Icons.QrCode size={12} className="md:w-3.5 md:h-3.5 text-orange-500" /> QR Code Banner / Print Poster
