@@ -438,6 +438,8 @@ export async function deletePhoto(token: string, eventId: string, photoId: strin
 }
 export type PhotoRemovalRequest = { id: string; eventId: string; photoId: string; guestSessionId: string; status: string; createdAt: string; fileName: string | null; thumbUrl?: string };
 export async function getPhotoRemovalRequests(token: string, eventId: string) { return json<PhotoRemovalRequest[]>(`/v1/events/${encodeURIComponent(eventId)}/photo-removal-requests`, { headers: { Authorization: `Bearer ${token}` } }); }
+export type PhotographerNotification = { id: string; kind: "removal_request" | "indexing_failed"; eventId: string; eventName: string; createdAt: string; title: string; detail: string };
+export async function getPhotographerNotifications(token: string) { return json<{ items: PhotographerNotification[]; count: number }>("/v1/photographer/notifications", { headers: { Authorization: `Bearer ${token}` } }); }
 export async function reviewPhotoRemovalRequest(token: string, eventId: string, requestId: string, approve: boolean) { return json<{ ok: true }>(`/v1/events/${encodeURIComponent(eventId)}/photo-removal-requests/${encodeURIComponent(requestId)}`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ approve }) }); }
 export type DeletedEventPhoto = { id: string; fileName: string | null; deletedAt: string | null };
 export async function getDeletedEventPhotos(token: string, eventId: string) { return json<DeletedEventPhoto[]>(`/v1/events/${encodeURIComponent(eventId)}/deleted-photos`, { headers: { Authorization: `Bearer ${token}` } }); }

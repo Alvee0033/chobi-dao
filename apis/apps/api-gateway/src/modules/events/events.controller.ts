@@ -18,6 +18,9 @@ export class EventsController {
   @Get("events") @UseGuards(JwtAuthGuard)
   list(@Req() req: { user: { id: string } }) { return this.events.list(req.user.id); }
 
+  @Get("photographer/notifications") @UseGuards(JwtAuthGuard)
+  notifications(@Req() req: { user: { id: string } }) { return this.events.notifications(req.user.id); }
+
   @Post("events") @UseGuards(JwtAuthGuard)
   create(@Req() req: { user: { id: string } }, @Body() dto: CreateEventDto) { return this.events.create(req.user.id, dto); }
 

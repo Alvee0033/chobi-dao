@@ -27,6 +27,21 @@ export class EventsService {
     return Promise.all(events.map((event) => this.withDisplayFields(event)));
   }
 
+  async notifications(photographerId: string) {
+    const ownedEvent = { photographerId, deletedAt: null };
+    const [requests, failures, requestCount, failureCount] = await Promise.all([
+      this.prisma.photoRemovalRequest.findMany({ where: { status: "pending", event: ownedEvent }, orderBy: { createdAt: "desc" }, take: 12, select: { id: true, eventId: true, createdAt: true, event: { select: { name: true } } } }),
+      this.prisma.photo.findMany({ where: { indexStatus: "failed", deletedAt: null, event: ownedEvent }, orderBy: { uploadedAt: "desc" }, take: 12, select: { id: true, eventId: true, uploadedAt: true, event: { select: { name: true } } } }),
+      this.prisma.photoRemovalRequest.count({ where: { status: "pending", event: ownedEvent } }),
+      this.prisma.photo.count({ where: { indexStatus: "failed", deletedAt: null, event: ownedEvent } }),
+    ]);
+    const items = [
+      ...requests.map((request) => ({ id: `removal:${request.id}`, kind: "removal_request" as const, eventId: request.eventId, eventName: request.event.name, createdAt: request.createdAt.toISOString(), title: "Photo removal request", detail: "A guest asked you to review a photo." })),
+      ...failures.map((photo) => ({ id: `indexing:${photo.id}`, kind: "indexing_failed" as const, eventId: photo.eventId, eventName: photo.event.name, createdAt: photo.uploadedAt.toISOString(), title: "Photo needs attention", detail: "Face matching failed for a photo." })),
+    ].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 20);
+    return { items, count: requestCount + failureCount };
+  }
+
   async create(photographerId: string, dto: CreateEventDto) {
     const base = slugify(dto.name, { lower: true, strict: true });
     const count = await this.prisma.event.count({ where: { slug: { startsWith: base } } });

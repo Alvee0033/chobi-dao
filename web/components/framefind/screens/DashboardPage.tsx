@@ -10,6 +10,7 @@ import { ClayCard } from "../ui/ClayCard";
 import "./dashboard-page.css";
 import type { UploadSummary } from "./dashboard/model";
 import { useUploadManager } from "./dashboard/UploadManager";
+import { PhotographerNotifications } from "./dashboard/PhotographerNotifications";
 
 async function optimizeImageForDirectUpload(file: File): Promise<File> {
   if (!file.type.startsWith("image/") || file.size < 2_500_000) return file;
@@ -514,7 +515,8 @@ export function DashboardPage({ setView, showToast, auth, onAuth }: { setView: V
             <div className="flex-1 text-center px-2 min-w-0">
               <h1 className="font-heading font-black text-charcoal text-sm md:text-base truncate">{subpageTitle}</h1>
             </div>
-            <div className="w-10 h-10 flex items-center justify-center">
+            <div className="flex items-center gap-2">
+              {auth && <PhotographerNotifications token={auth.accessToken} />}
               {isViewingGallery ? (
                 <label className="cursor-pointer">
                   <input
@@ -548,12 +550,12 @@ export function DashboardPage({ setView, showToast, auth, onAuth }: { setView: V
               <img src="/assets/chobidao.webp" alt="Chobi Dao" className="w-7 h-7 object-contain" />
               <span>Chobi dao</span>
             </div>
-            <button 
+            <div className="flex items-center gap-2">{auth && <PhotographerNotifications token={auth.accessToken} />}<button 
               onClick={() => handleTabChange("settings")}
               className="w-10 h-10 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center text-orange-500 shadow-clay-card font-black active:scale-95 transition-all text-xs"
             >
               {auth?.name?.[0]?.toUpperCase() ?? "U"}
-            </button>
+            </button></div>
           </>
         )}
       </header>
@@ -655,6 +657,7 @@ export function DashboardPage({ setView, showToast, auth, onAuth }: { setView: V
       <main className={`studio-dashboard-main flex-1 px-4 py-6 md:p-8 lg:p-12 pt-20 lg:pt-12 overflow-y-auto transition-all ${
         selectedEventId ? "pb-12" : "pb-24 lg:pb-12"
       }`}>
+        {auth && <div className="hidden lg:flex justify-end mb-3"><PhotographerNotifications token={auth.accessToken} /></div>}
         {!selectedEventId && activeTab !== "billing" && billingUsage && (
           <div className="cd-dashboard-trial-banner">
             <span className="cd-dashboard-trial-mark"><Icons.Sparkles size={18} /></span>
