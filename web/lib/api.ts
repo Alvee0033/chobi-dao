@@ -81,6 +81,7 @@ export type SearchPhoto = {
   fullUrl: string;
   urlExpiresAt: string;
   similarity: number;
+  canRemoveOriginal?: boolean;
 };
 
 export type EventPhoto = {

@@ -7,7 +7,8 @@ describe("guest photo removal", () => {
   const session = { id: "00000000-0000-4000-8000-000000000030", eventId, expiresAt: new Date(Date.now() + 60_000), matchedPhotoIds: [photoId], matchedScores: [0.9] };
   const fixture = (photo: { id: string; indexStatus: string; faceCount: number } | null) => {
     const tx = {
-      photo: { update: jest.fn() },
+      photo: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      photoRemovalRequest: { upsert: jest.fn() },
       event: { update: jest.fn() },
       guestSession: { findMany: jest.fn().mockResolvedValue([{ id: session.id, matchedPhotoIds: [photoId], matchedScores: [0.9] }]), update: jest.fn() },
     };
@@ -25,7 +26,8 @@ describe("guest photo removal", () => {
     const { service, tx } = fixture({ id: photoId, indexStatus: "indexed", faceCount: 1 });
     const result = await service.requestPhotoRemoval("event", "session-token", photoId);
     expect(result.status).toBe("removed");
-    expect(tx.photo.update).toHaveBeenCalledWith({ where: { id: photoId }, data: { deletedAt: expect.any(Date) } });
+    expect(tx.photo.updateMany).toHaveBeenCalledWith({ where: { id: photoId, deletedAt: null }, data: { deletedAt: expect.any(Date) } });
+    expect(tx.photoRemovalRequest.upsert).toHaveBeenCalled();
     expect(tx.event.update).toHaveBeenCalledWith({ where: { id: eventId }, data: { totalPhotos: { decrement: 1 }, indexedPhotos: { decrement: 1 } } });
     expect(tx.guestSession.update).toHaveBeenCalledWith({ where: { id: session.id }, data: { matchedPhotoIds: [], matchedScores: [] } });
   });
@@ -34,7 +36,15 @@ describe("guest photo removal", () => {
     const { service, prisma, tx } = fixture({ id: photoId, indexStatus: "indexed", faceCount: 3 });
     await expect(service.requestPhotoRemoval("event", "session-token", photoId)).resolves.toEqual({ status: "review_requested" });
     expect(prisma.photoRemovalRequest.upsert).toHaveBeenCalled();
-    expect(tx.photo.update).not.toHaveBeenCalled();
+    expect(tx.photo.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("does not decrement event counts twice when a solo photo was already removed", async () => {
+    const { service, tx } = fixture({ id: photoId, indexStatus: "indexed", faceCount: 1 });
+    tx.photo.updateMany.mockResolvedValue({ count: 0 });
+    await expect(service.requestPhotoRemoval("event", "session-token", photoId)).resolves.toMatchObject({ status: "removed" });
+    expect(tx.event.update).not.toHaveBeenCalled();
+    expect(tx.photoRemovalRequest.upsert).not.toHaveBeenCalled();
   });
 
   it("rejects expired, unrelated, or non-matching gallery sessions", async () => {

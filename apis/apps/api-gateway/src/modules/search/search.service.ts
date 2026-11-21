@@ -195,6 +195,7 @@ export class SearchService {
         fullUrl: this.buildMediaUrl(apiBase, photo.id, "image"),
         urlExpiresAt: expiresAt.toISOString(),
         similarity: scores[offset + index] ?? 0,
+        canRemoveOriginal: guestCanRemoveOriginal(photo),
       }];
     });
   }
@@ -240,7 +241,13 @@ export class SearchService {
     if (guestCanRemoveOriginal(photo)) {
       const now = new Date();
       await this.prisma.$transaction(async (tx) => {
-        await tx.photo.update({ where: { id: photo.id }, data: { deletedAt: now } });
+        const changed = await tx.photo.updateMany({ where: { id: photo.id, deletedAt: null }, data: { deletedAt: now } });
+        if (changed.count === 0) return;
+        await tx.photoRemovalRequest.upsert({
+          where: { photoId_guestSessionId: { photoId, guestSessionId: session.id } },
+          create: { eventId: event.id, photoId, guestSessionId: session.id, status: "approved", reviewedAt: now },
+          update: { status: "approved", reviewedAt: now },
+        });
         await tx.event.update({ where: { id: event.id }, data: { totalPhotos: { decrement: 1 }, indexedPhotos: { decrement: 1 } } });
         const sessions = await tx.guestSession.findMany({ where: { eventId: event.id, matchedPhotoIds: { has: photoId } }, select: { id: true, matchedPhotoIds: true, matchedScores: true } });
         for (const active of sessions) {

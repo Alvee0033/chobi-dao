@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { type SearchPhoto, getPublicPersonPhotos } from "@/lib/api";
+import { type SearchPhoto, getGuestSessionPhotos, getPublicPersonPhotos } from "@/lib/api";
 import { BackgroundBlobs } from "@/components/framefind/ui/BackgroundBlobs";
 import { Toast } from "@/components/framefind/ui/Toast";
 import { GuestGalleryPage } from "@/components/framefind/screens/GuestGalleryPage";
@@ -45,6 +45,13 @@ function EventPhotosContent({ slug }: { slug: string }) {
       setIndexingCount(session.indexingCount ?? 0);
       setTotalCount(session.totalCount ?? session.photos.length);
       setNextOffset(session.nextOffset ?? session.photos.length);
+      getGuestSessionPhotos(slug, session.sessionToken, 0).then((fresh) => {
+        setPhotos(fresh.photos);
+        setTotalCount(fresh.count);
+        setNextOffset(fresh.nextOffset);
+      }).catch((error) => {
+        setToastMsg(error instanceof Error ? error.message : "Could not refresh your gallery.");
+      });
     }
   }, [slug, personId, router]);
 

@@ -564,11 +564,23 @@ export class UploadService {
     ]);
     if (!request || !ownedEvent) throw new NotFoundException("Removal request not found");
     await this.prisma.$transaction(async (tx) => {
-      await tx.photoRemovalRequest.update({ where: { id: requestId }, data: { status: approve ? "approved" : "rejected", reviewedAt: new Date() } });
+      const reviewed = await tx.photoRemovalRequest.updateMany({ where: { id: requestId, status: "pending" }, data: { status: approve ? "approved" : "rejected", reviewedAt: new Date() } });
+      if (reviewed.count === 0) throw new ConflictException("This request was already reviewed");
       if (approve) {
         const photo = await tx.photo.findFirst({ where: { id: request.photoId, eventId, deletedAt: null } });
-        if (photo) await tx.photo.update({ where: { id: photo.id }, data: { deletedAt: new Date() } });
-        if (photo) await tx.event.update({ where: { id: eventId }, data: { totalPhotos: { decrement: 1 }, ...(photo.indexStatus === "indexed" ? { indexedPhotos: { decrement: 1 } } : {}) } });
+        if (photo) {
+          const removed = await tx.photo.updateMany({ where: { id: photo.id, deletedAt: null }, data: { deletedAt: new Date() } });
+          if (removed.count > 0) {
+            await tx.event.update({ where: { id: eventId }, data: { totalPhotos: { decrement: 1 }, ...(photo.indexStatus === "indexed" ? { indexedPhotos: { decrement: 1 } } : {}) } });
+            const sessions = await tx.guestSession.findMany({ where: { eventId, matchedPhotoIds: { has: photo.id } }, select: { id: true, matchedPhotoIds: true, matchedScores: true } });
+            for (const session of sessions) {
+              await tx.guestSession.update({ where: { id: session.id }, data: {
+                matchedPhotoIds: session.matchedPhotoIds.filter((id) => id !== photo.id),
+                matchedScores: session.matchedScores.filter((_, index) => session.matchedPhotoIds[index] !== photo.id),
+              } });
+            }
+          }
+        }
       }
     });
     return { ok: true, status: approve ? "approved" : "rejected" };

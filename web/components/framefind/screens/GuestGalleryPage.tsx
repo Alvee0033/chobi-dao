@@ -2,10 +2,10 @@ import { useState, useEffect, useCallback, useRef, memo } from "react";
 import { type SearchPhoto, getGuestSessionPhotos, requestGuestPhotoRemoval } from "@/lib/api";
 import { Icons } from "../icons";
 import type { ShowToast } from "../types";
-import { ClayButton } from "../ui/ClayButton";
 import { ClayCard } from "../ui/ClayCard";
 import { PhotoLightbox } from "../ui/PhotoLightbox";
 import { downloadPhoto } from "@/lib/browser-compat";
+import "./guest-gallery.css";
 
 // Memoized PhotoCard to prevent unnecessary grid re-renders
 const PhotoCard = memo(function PhotoCard({
@@ -16,8 +16,10 @@ const PhotoCard = memo(function PhotoCard({
   slug,
   toggleSelect,
   downloadSingle,
-  onOpenLightbox
-  ,onRemovePhoto
+  onOpenLightbox,
+  onRemovePhoto,
+  removalRequested,
+  canRequestRemoval
 }: {
   photo: SearchPhoto;
   idx: number;
@@ -28,17 +30,19 @@ const PhotoCard = memo(function PhotoCard({
   downloadSingle: (url: string, filename: string) => void;
   onOpenLightbox: (idx: number) => void;
   onRemovePhoto: (photoId: string) => void;
+  removalRequested: boolean;
+  canRequestRemoval: boolean;
 }) {
   return (
-    <div 
+    <article
       style={{ contentVisibility: "auto", containIntrinsicSize: "0 320px" }}
-      className={`aspect-square p-1.5 rounded-3xl bg-white/90 backdrop-blur-sm border transition-all duration-300 ${
+      className={`guest-gallery-card ${
         isSelected 
-          ? "border-orange-500 shadow-lg ring-4 ring-orange-500/20 scale-[0.98]" 
-          : "border-orange-100/40 hover:shadow-xl hover:border-orange-300 hover:-translate-y-1"
+          ? "is-selected"
+          : ""
       }`}
     >
-      <div 
+      <button type="button"
         onClick={() => {
           if (isSelectMode) {
             toggleSelect(photo.id);
@@ -46,7 +50,8 @@ const PhotoCard = memo(function PhotoCard({
             onOpenLightbox(idx);
           }
         }}
-        className="w-full h-full rounded-[22px] overflow-hidden relative group bg-gradient-to-tr from-orange-50 to-amber-50/50 cursor-pointer select-none"
+        className="guest-gallery-image"
+        aria-label={isSelectMode ? `${isSelected ? "Deselect" : "Select"} photo ${idx + 1}` : `View photo ${idx + 1}`}
       >
         <img
           src={photo.thumbSmallUrl || photo.thumbMediumUrl || photo.thumbUrl || ""}
@@ -54,20 +59,8 @@ const PhotoCard = memo(function PhotoCard({
           loading={idx < 4 ? "eager" : "lazy"}
           decoding="async"
           fetchPriority={idx < 2 ? "high" : "low"}
-          className={`w-full h-full object-cover transition-all duration-500 ${
-            isSelected ? "scale-105 brightness-90" : "group-hover:scale-110"
-          }`}
+          className="w-full h-full object-cover"
         />
-
-        {/* Match score badge */}
-        {photo.similarity && !isSelectMode && (
-          <div className="absolute top-2.5 left-2.5 z-10 opacity-90 group-hover:opacity-100 transition-opacity">
-            <span className="px-2.5 py-1 rounded-full text-[10px] font-black tracking-wider bg-black/60 backdrop-blur-md text-orange-300 border border-white/10 shadow-sm flex items-center gap-1">
-              <Icons.Sparkles size={10} />
-              {Math.round(photo.similarity * 100)}%
-            </span>
-          </div>
-        )}
 
         {/* Interactive Selection Overlays */}
         {isSelectMode ? (
@@ -80,26 +73,10 @@ const PhotoCard = memo(function PhotoCard({
               <Icons.Check size={16} className="stroke-[3.5]" />
             </div>
           </div>
-        ) : (
-          <div className="absolute inset-0 bg-gradient-to-t from-charcoal/70 via-charcoal/20 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-end justify-between p-4 backdrop-blur-[2px]">
-            <span className="text-white text-xs font-black tracking-wide flex items-center gap-1.5 drop-shadow-md">
-              <Icons.Maximize2 size={13} /> Tap to expand
-            </span>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                downloadSingle(photo.fullUrl, `${slug}-photo-${idx + 1}.jpg`);
-              }}
-              className="bg-white hover:bg-orange-50 text-orange-600 p-2.5 rounded-2xl shadow-xl transform translate-y-2 group-hover:translate-y-0 transition-all hover:scale-110 active:scale-95 border border-orange-100"
-              title="Quick download"
-            >
-              <Icons.Download size={16} />
-            </button>
-            <button onClick={(e) => { e.stopPropagation(); onRemovePhoto(photo.id); }} className="rounded-full border border-white/70 bg-white/95 p-2.5 text-stone-700 shadow-xl" title="Remove from event" aria-label="Remove this photo from the event"><Icons.Trash size={16} /></button>
-          </div>
-        )}
-      </div>
-    </div>
+        ) : null}
+      </button>
+      <div className="guest-gallery-card-info"><div><strong>Photo {String(idx + 1).padStart(2, "0")}</strong>{canRequestRemoval && <span>{photo.canRemoveOriginal ? "Just you" : "Group photo"}</span>}</div><div className="guest-gallery-card-actions"><button type="button" onClick={() => downloadSingle(photo.fullUrl, `${slug}-photo-${idx + 1}.jpg`)} aria-label={`Download photo ${idx + 1}`}><Icons.Download size={16} /><span>Download</span></button>{canRequestRemoval && <button type="button" disabled={removalRequested} onClick={() => onRemovePhoto(photo.id)} aria-label={photo.canRemoveOriginal ? `Remove photo ${idx + 1}` : `Request removal of group photo ${idx + 1}`}><Icons.Trash size={15} /><span>{removalRequested ? "Request sent" : photo.canRemoveOriginal ? "Remove" : "Request removal"}</span></button>}</div></div>
+    </article>
   );
 });
 
@@ -126,14 +103,22 @@ export function GuestGalleryPage({
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [visibleCount, setVisibleCount] = useState(16);
   const [photos, setPhotos] = useState(initialPhotos);
+  const [currentTotal, setCurrentTotal] = useState(totalCount);
+  const [requestedIds, setRequestedIds] = useState<Set<string>>(() => new Set());
+  const [layout, setLayout] = useState<"grid" | "list">("grid");
+  const [confirmPhotoId, setConfirmPhotoId] = useState<string | null>(null);
   const [removingPhotoId, setRemovingPhotoId] = useState<string | null>(null);
   const [nextOffset, setNextOffset] = useState(initialOffset);
   const [loadingMore, setLoadingMore] = useState(false);
   const loadingMoreRef = useRef(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
+  useEffect(() => {
+    if (window.matchMedia("(max-width: 620px)").matches) setLayout("list");
+  }, []);
+
   const loadMorePhotos = useCallback(async () => {
-    if (loadingMoreRef.current || nextOffset >= totalCount || sessionToken === "public-person-share") return;
+    if (loadingMoreRef.current || nextOffset >= currentTotal || sessionToken === "public-person-share") return;
     loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
@@ -143,24 +128,26 @@ export function GuestGalleryPage({
         return [...current, ...result.photos.filter((photo) => !seen.has(photo.id))];
       });
       setNextOffset(result.nextOffset);
+      setCurrentTotal(result.count);
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Could not load more photos.");
     } finally {
       loadingMoreRef.current = false;
       setLoadingMore(false);
     }
-  }, [loadingMore, nextOffset, totalCount, sessionToken, slug, showToast]);
+  }, [nextOffset, currentTotal, sessionToken, slug, showToast]);
 
 
   // Reset visible count if photos array changes
   useEffect(() => {
     setVisibleCount(16);
     setPhotos(initialPhotos);
+    setCurrentTotal(totalCount);
     setNextOffset(initialOffset);
-  }, [initialPhotos, initialOffset]);
+  }, [initialPhotos, initialOffset, totalCount]);
 
   useEffect(() => {
-    if (visibleCount >= photos.length && (nextOffset >= totalCount || loadingMore)) return;
+    if (visibleCount >= photos.length && (nextOffset >= currentTotal || loadingMore)) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -182,7 +169,7 @@ export function GuestGalleryPage({
         observer.unobserve(target);
       }
     };
-  }, [visibleCount, photos.length, nextOffset, totalCount, loadingMore, loadMorePhotos]);
+  }, [visibleCount, photos.length, nextOffset, currentTotal, loadingMore, loadMorePhotos]);
 
   const downloadSinglePhoto = useCallback(async (photoUrl: string, filename: string) => {
     showToast("Downloading photo...");
@@ -203,17 +190,25 @@ export function GuestGalleryPage({
 
   const removeGuestPhoto = useCallback(async (photoId: string) => {
     if (removingPhotoId) return;
-    const confirmed = window.confirm("Remove this photo from the event? Solo photos are removed immediately. Group photos are sent to the photographer for review.");
-    if (!confirmed) return;
     setRemovingPhotoId(photoId);
     try {
       const result = await requestGuestPhotoRemoval(slug, sessionToken, photoId);
-      setPhotos((current) => current.filter((photo) => photo.id !== photoId));
-      setSelectedIds((current) => { const next = new Set(current); next.delete(photoId); return next; });
-      showToast(result.status === "removed" ? "Photo removed from the event." : "Request sent to the photographer for review.");
+      if (result.status === "removed") {
+        const removedIndex = photos.findIndex((photo) => photo.id === photoId);
+        setPhotos((current) => current.filter((photo) => photo.id !== photoId));
+        setCurrentTotal((count) => Math.max(0, count - 1));
+        if (removedIndex >= 0 && removedIndex < nextOffset) setNextOffset((offset) => Math.max(0, offset - 1));
+        setSelectedIds((current) => { const next = new Set(current); next.delete(photoId); return next; });
+        setLightboxIndex(null);
+        showToast("Solo photo removed from the event. The photographer can restore it for 30 days.");
+      } else {
+        setRequestedIds((current) => new Set(current).add(photoId));
+        showToast("Group photo stays in the gallery. Your request was sent to the photographer.");
+      }
+      setConfirmPhotoId(null);
     } catch (error) { showToast(error instanceof Error ? error.message : "Could not request photo removal."); }
     finally { setRemovingPhotoId(null); }
-  }, [removingPhotoId, slug, sessionToken, showToast]);
+  }, [removingPhotoId, slug, sessionToken, showToast, photos, nextOffset]);
 
   const handleSelectAll = () => {
     if (selectedIds.size === photos.length) {
@@ -240,11 +235,13 @@ export function GuestGalleryPage({
     try {
       let allPhotos = [...photos];
       let offset = nextOffset;
-      while (offset < totalCount) {
+      const seen = new Set(allPhotos.map((photo) => photo.id));
+      while (offset < currentTotal) {
         const page = await getGuestSessionPhotos(slug, sessionToken, offset);
-        allPhotos = [...allPhotos, ...page.photos.filter((photo) => !allPhotos.some((loaded) => loaded.id === photo.id))];
+        allPhotos = [...allPhotos, ...page.photos.filter((photo) => { if (seen.has(photo.id)) return false; seen.add(photo.id); return true; })];
+        if (page.nextOffset <= offset) break;
         offset = page.nextOffset;
-        if (!page.photos.length && page.hasMore) break;
+        if (!page.hasMore) break;
       }
       showToast(`Downloading all ${allPhotos.length} photos...`);
       for (let i = 0; i < allPhotos.length; i++) {
@@ -259,60 +256,57 @@ export function GuestGalleryPage({
   };
 
   return (
-    <div className="min-h-screen flex flex-col relative z-10 p-4 pb-24 md:p-8" data-testid="gallery-page">
+    <main className="guest-gallery-page" data-testid="gallery-page">
       {/* Header */}
-      <header className="flex justify-between items-center max-w-5xl w-full mx-auto py-4 mb-8 bg-white/60 backdrop-blur-xl px-6 rounded-3xl border border-orange-100/60 shadow-sm">
-        <div className="flex items-center gap-3 text-orange-600 font-heading font-black text-2xl tracking-tight cursor-pointer" onClick={onStartOver}>
+      <header className="guest-gallery-header">
+        <button type="button" className="guest-gallery-brand" onClick={onStartOver}>
           <img src="/assets/chobidao.webp" alt="Chobi Dao" className="w-9 h-9 object-contain drop-shadow-md" />
-          <span>Chobi dao</span>
-        </div>
+          <span>Chobi Dao</span>
+        </button>
         <button 
           onClick={onStartOver} 
-          className="h-10 px-5 text-xs font-black text-orange-600 bg-orange-50 hover:bg-orange-100/80 rounded-2xl transition-all border border-orange-200/60 active:scale-95 flex items-center gap-2 shadow-sm"
+          className="guest-gallery-new-search"
         >
           <Icons.ChevronLeft size={16} />
-          New Search
+          New search
         </button>
       </header>
 
       {/* Main Container */}
-      <div className="max-w-5xl mx-auto w-full flex-1">
+      <div className="guest-gallery-content">
 
 
 
         {indexingCount > 0 && (
-          <div className="mb-5 rounded-2xl border border-orange-200 bg-orange-50 p-4 text-sm text-charcoal" role="status">
+          <div className="guest-gallery-notice" role="status">
             {indexingCount} event photo{indexingCount === 1 ? " is" : "s are"} still processing. More matches may appear later.
             <button onClick={onStartOver} className="ml-2 font-bold text-orange-700 underline underline-offset-2">Scan again later</button>
           </div>
         )}
         {/* Info & Toolbar */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-8 bg-white/60 backdrop-blur-xl p-6 sm:p-8 rounded-3xl border border-orange-100/60 shadow-sm">
+        <div className="guest-gallery-intro">
           <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-orange-500/10 text-orange-600 border border-orange-500/20 flex items-center gap-1.5">
-                <Icons.Sparkles size={13} /> AI Matched
+            <div className="guest-gallery-eyebrow">
+              <span>
+                <i /> YOUR EVENT PHOTOS
               </span>
             </div>
-            <h1 className="text-3xl sm:text-4xl font-black font-heading text-charcoal tracking-tight">Your Event Gallery</h1>
-            <p className="text-sm sm:text-base text-muted font-bold mt-1">
-              Found <span className="text-orange-600 font-black">{totalCount}</span> photos of you in this event.
+            <h1>Found your <em>moments.</em></h1>
+            <p>
+              <strong>{currentTotal}</strong> photo{currentTotal === 1 ? "" : "s"} of you, ready to keep.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+          <div className="guest-gallery-toolbar">
             {photos.length > 0 && (
               <>
+                <div className="guest-gallery-layout" role="group" aria-label="Gallery layout"><button type="button" className={layout === "grid" ? "active" : ""} aria-pressed={layout === "grid"} onClick={() => setLayout("grid")}>Grid</button><button type="button" className={layout === "list" ? "active" : ""} aria-pressed={layout === "list"} onClick={() => setLayout("list")}>List</button></div>
                 <button
                   onClick={() => {
                     setIsSelectMode(!isSelectMode);
                     setSelectedIds(new Set());
                   }}
-                  className={`h-11 px-5 rounded-2xl text-xs font-black transition-all flex items-center gap-2 border shadow-sm active:scale-95 ${
-                    isSelectMode 
-                      ? "bg-charcoal text-white border-charcoal" 
-                      : "bg-white text-charcoal border-orange-200/80 hover:bg-orange-50/50"
-                  }`}
+                  className="guest-gallery-select"
                 >
                   <Icons.Check size={14} />
                   {isSelectMode ? "Done" : "Select"}
@@ -322,7 +316,7 @@ export function GuestGalleryPage({
                   <>
                     <button
                       onClick={handleSelectAll}
-                      className="h-11 px-4 bg-white hover:bg-orange-50 text-charcoal border border-orange-200/80 rounded-2xl text-xs font-black transition-all flex items-center gap-2 shadow-sm active:scale-95"
+                      className="guest-gallery-select"
                     >
                       {selectedIds.size === photos.length ? <Icons.CheckSquare size={14} className="text-orange-600" /> : <Icons.Square size={14} />}
                       {selectedIds.size === photos.length ? "Deselect loaded" : "Select loaded"}
@@ -331,7 +325,7 @@ export function GuestGalleryPage({
                     <button
                       onClick={handleDownloadSelected}
                       disabled={selectedIds.size === 0}
-                      className="h-11 px-5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-2xl text-xs font-black transition-all flex items-center gap-2 shadow-lg shadow-orange-500/20 disabled:opacity-40 disabled:pointer-events-none active:scale-95"
+                      className="guest-gallery-download"
                     >
                       <Icons.Download size={14} />
                       Download ({selectedIds.size})
@@ -340,10 +334,10 @@ export function GuestGalleryPage({
                 ) : (
                   <button
                     onClick={handleDownloadAll}
-                    className="h-11 px-6 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-2xl text-xs font-black transition-all flex items-center gap-2 shadow-lg shadow-orange-500/20 active:scale-95"
+                    className="guest-gallery-download"
                   >
                     <Icons.Download size={15} />
-                    Download All ({totalCount})
+                    Download all ({currentTotal})
                   </button>
                 )}
               </>
@@ -353,7 +347,7 @@ export function GuestGalleryPage({
 
         {/* Gallery Grid */}
         {photos.length === 0 ? (
-          <ClayCard className="p-16 text-center text-muted bg-white/60 backdrop-blur-xl border-dashed border-2 border-orange-200/80 rounded-3xl shadow-sm">
+          <ClayCard className="guest-gallery-empty">
             <div className="w-16 h-16 bg-orange-100/60 rounded-full flex items-center justify-center mx-auto mb-4 text-orange-500">
               <Icons.Image size={32} />
             </div>
@@ -367,8 +361,8 @@ export function GuestGalleryPage({
             </button>
           </ClayCard>
         ) : (
-          <div className="space-y-8">
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5">
+          <div className="guest-gallery-results">
+            <div className={`guest-gallery-grid ${layout === "list" ? "as-list" : ""}`}>
               {photos.slice(0, visibleCount).map((photo, idx) => (
                 <PhotoCard
                   key={photo.id}
@@ -379,12 +373,14 @@ export function GuestGalleryPage({
                   slug={slug}
                   toggleSelect={toggleSelectPhoto}
                   downloadSingle={downloadSinglePhoto}
-                  onRemovePhoto={removeGuestPhoto}
-                  onOpenLightbox={(index) => setLightboxIndex(index)}
+                  onRemovePhoto={setConfirmPhotoId}
+                  removalRequested={requestedIds.has(photo.id)}
+                  canRequestRemoval={sessionToken !== "public-person-share"}
+                  onOpenLightbox={setLightboxIndex}
                 />
               ))}
             </div>
-            {(visibleCount < photos.length || nextOffset < totalCount) && (
+            {(visibleCount < photos.length || nextOffset < currentTotal) && (
               <div id="load-more-trigger" className="h-20 w-full flex items-center justify-center py-6">
                 {loadingMore ? <Icons.Loader size={28} className="text-orange-500" /> : <Icons.Loader size={28} className="text-orange-500" />}
               </div>
@@ -405,6 +401,7 @@ export function GuestGalleryPage({
           slug={slug}
         />
       )}
-    </div>
+      {confirmPhotoId && <div className="guest-gallery-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !removingPhotoId) setConfirmPhotoId(null); }}><section className="guest-gallery-dialog" role="alertdialog" aria-modal="true" aria-labelledby="guest-photo-removal-title" aria-describedby="guest-photo-removal-copy"><div className="guest-gallery-dialog-icon"><Icons.Trash size={20} /></div><h2 id="guest-photo-removal-title">{photos.find((photo) => photo.id === confirmPhotoId)?.canRemoveOriginal ? "Remove this photo?" : "Request group photo removal?"}</h2><p id="guest-photo-removal-copy">{photos.find((photo) => photo.id === confirmPhotoId)?.canRemoveOriginal ? "This solo photo will disappear from the event and everyone’s gallery. The photographer can restore it for 30 days." : "This group photo includes other people. It stays in the event while the photographer reviews your request."}</p><div className="guest-gallery-dialog-actions"><button type="button" disabled={!!removingPhotoId} onClick={() => setConfirmPhotoId(null)}>Keep photo</button><button type="button" disabled={!!removingPhotoId} onClick={() => void removeGuestPhoto(confirmPhotoId)}>{removingPhotoId ? "Please wait…" : photos.find((photo) => photo.id === confirmPhotoId)?.canRemoveOriginal ? "Remove photo" : "Send request"}</button></div></section></div>}
+    </main>
   );
 }
