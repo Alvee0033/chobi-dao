@@ -33,7 +33,6 @@ export type AuthUser = {
   email: string;
   name?: string | null;
   plan: string;
-  isAdmin?: boolean;
   hasDriveConnected?: boolean;
   driveRootFolderId?: string | null;
 };

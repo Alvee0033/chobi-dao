@@ -63,7 +63,7 @@ The billing page offers UddoktaPay and direct bKash as separate checkout options
 In Coolify service settings, map the domains to the respective service ports:
 - **`web`**: Set FQDN `https://chobi.yourdomain.com` (routes to port 3000)
 - **`api-gateway`**: Set FQDN `https://api-chobi.yourdomain.com` (routes to port 3001)
-- **`admin`**: Keep the Operations app/container internal on port 3100. The web app proxies `/admin/*` to it, so the staff link uses `https://chobi.yourdomain.com/admin` without a second DNS record. A dedicated admin hostname can be added later if desired.
+- **Owner console**: Create a separate Coolify Dockerfile application from this repository with base directory `/admin-app`, port `3100`, and its own HTTPS hostname. Set its build-time `NEXT_PUBLIC_API_URL` to the API gateway URL. Add that hostname to the gateway's `CORS_ORIGINS` alongside the public web hostname.
 - **`minio`** *(Optional public asset CDN)*: Set FQDN `https://s3-chobi.yourdomain.com` (routes to port 9000)
 
 ### Step 5: Click Deploy
@@ -75,15 +75,16 @@ Coolify will build and start the stack services:
 5. `chobi-api-gateway` (runs `prisma migrate deploy` automatically on boot)
 6. `chobi-worker` (reads originals from the same MinIO bucket and indexes faces asynchronously)
 7. `chobi-web` (photographer and guest application)
-8. `chobi-admin` (isolated staff Operations application)
 
-The API applies additive Prisma schema changes with `prisma db push` at gateway startup. After deployment, grant the first admin to an existing **verified photographer** from the gateway container:
+Deploy the owner console as a separate Coolify resource after the main stack is healthy. The public web app redirects legacy `/admin` links to its dedicated hostname.
+
+The API applies additive Prisma schema changes with `prisma db push` at gateway startup. Bootstrap the first owner account once from the gateway container:
 
 ```bash
-docker compose exec api-gateway sh -lc 'cd apps/api-gateway && npm run admin:grant -- staff@example.com'
+docker compose exec api-gateway sh -lc 'cd apps/api-gateway && npm run admin:bootstrap -- owner@example.com'
 ```
 
-The grant command rejects unknown or unverified accounts and refuses to grant an account that is already an admin. Admin API access is checked against the database role on every request. The admin UI runs in its own container; the web container proxies `/admin/*` internally so the staff link is `https://chobi.yourdomain.com/admin`.
+The command generates a temporary password and prints it once. Store it securely, then sign in at the owner-console hostname and set a new password immediately. It refuses to run when an owner account already exists. Owner credentials are separate from photographer accounts; the API checks the owner record and token version on every protected request.
 
 ---
 

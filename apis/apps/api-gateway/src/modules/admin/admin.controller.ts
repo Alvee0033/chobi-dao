@@ -8,6 +8,7 @@ import { AdminService } from "./admin.service";
 export class AdminController {
   constructor(private readonly admin: AdminService) {}
   @Get("overview") overview() { return this.admin.overview(); }
+  @Get("users") users(@Query("q") q?: string, @Query("cursor") cursor?: string) { return this.admin.users(q, cursor); }
   @Get("photographers") accounts(@Query("q") q?: string, @Query("cursor") cursor?: string) { return this.admin.accounts(q, cursor); }
   @Get("trials") trials(@Query("q") q?: string, @Query("cursor") cursor?: string) { return this.admin.trials(q, cursor); }
   @Get("events") events(@Query("q") q?: string, @Query("cursor") cursor?: string) { return this.admin.events(q, cursor); }

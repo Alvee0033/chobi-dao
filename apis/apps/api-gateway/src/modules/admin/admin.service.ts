@@ -19,25 +19,34 @@ export class AdminService {
 
   async overview() {
     const now = new Date();
-    const [photographers, events, photos, failedPhotos, activeSubscriptions, trials, pendingPayments, storage] = await Promise.all([
-      this.prisma.photographer.count(), this.prisma.event.count({ where: { deletedAt: null } }),
+    const [photographers, users, events, photos, failedPhotos, activeSubscriptions, trials, pendingPayments, successfulMatches, storage, revenue] = await Promise.all([
+      this.prisma.photographer.count({ where: { systemRole: "photographer" } }),
+      this.prisma.appUser.count(),
+      this.prisma.event.count({ where: { deletedAt: null } }),
       this.prisma.photo.count({ where: { deletedAt: null } }), this.prisma.photo.count({ where: { indexStatus: "failed", deletedAt: null } }),
       this.prisma.subscription.count({ where: { status: "succeeded", currentPeriodEnd: { gt: now } } }),
-      this.prisma.photographer.count({ where: { trialEndsAt: { gt: now } } }),
+      this.prisma.photographer.count({ where: { systemRole: "photographer", trialEndsAt: { gt: now } } }),
       this.prisma.subscription.count({ where: { status: { in: ["pending", "initiated"] } } }),
-      this.prisma.photo.aggregate({ _sum: { fileSizeBytes: true } }),
+      this.prisma.scanEvent.count({ where: { result: "success" } }),
+      this.prisma.photo.aggregate({ where: { deletedAt: null }, _sum: { fileSizeBytes: true } }),
+      this.prisma.subscription.aggregate({ where: { status: "succeeded", currency: "BDT" }, _sum: { amount: true } }),
     ]);
-    return { photographers, events, photos, failedPhotos, activeSubscriptions, trials, pendingPayments, storageBytes: Number(storage._sum.fileSizeBytes ?? 0n) };
+    return { photographers, users, events, photos, failedPhotos, activeSubscriptions, trials, pendingPayments, successfulMatches, storageBytes: Number(storage._sum.fileSizeBytes ?? 0n), revenueBdt: Number(revenue._sum.amount ?? 0) };
+  }
+
+  async users(q = "", cursor?: string) {
+    cursor = this.validateCursor(cursor);
+    return this.page(await this.prisma.appUser.findMany({ where: q ? { OR: [{ email: { contains: q, mode: "insensitive" } }, { name: { contains: q, mode: "insensitive" } }] } : {}, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 51, ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}), select: { id: true, email: true, name: true, createdAt: true } }));
   }
 
   async accounts(q = "", cursor?: string) {
     cursor = this.validateCursor(cursor);
-    return this.page(await this.prisma.photographer.findMany({ where: q ? { OR: [{ email: { contains: q, mode: "insensitive" } }, { name: { contains: q, mode: "insensitive" } }] } : {}, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 51, ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}), select: { id: true, email: true, name: true, plan: true, systemRole: true, trialEndsAt: true, emailVerified: true, createdAt: true, _count: { select: { events: true } } } }));
+    return this.page(await this.prisma.photographer.findMany({ where: { systemRole: "photographer", ...(q ? { OR: [{ email: { contains: q, mode: "insensitive" } }, { name: { contains: q, mode: "insensitive" } }] } : {}) }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 51, ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}), select: { id: true, email: true, name: true, plan: true, systemRole: true, trialEndsAt: true, emailVerified: true, createdAt: true, _count: { select: { events: true } } } }));
   }
 
   async trials(q = "", cursor?: string) {
     cursor = this.validateCursor(cursor);
-    return this.page(await this.prisma.photographer.findMany({ where: { trialEndsAt: { gt: new Date() }, ...(q ? { OR: [{ email: { contains: q, mode: "insensitive" } }, { name: { contains: q, mode: "insensitive" } }] } : {}) }, orderBy: [{ trialEndsAt: "asc" }, { id: "asc" }], take: 51, ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}), select: { id: true, email: true, name: true, plan: true, trialEndsAt: true, createdAt: true } }));
+    return this.page(await this.prisma.photographer.findMany({ where: { systemRole: "photographer", trialEndsAt: { gt: new Date() }, ...(q ? { OR: [{ email: { contains: q, mode: "insensitive" } }, { name: { contains: q, mode: "insensitive" } }] } : {}) }, orderBy: [{ trialEndsAt: "asc" }, { id: "asc" }], take: 51, ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}), select: { id: true, email: true, name: true, plan: true, trialEndsAt: true, createdAt: true } }));
   }
 
   async events(q = "", cursor?: string) {
@@ -65,8 +74,8 @@ export class AdminService {
     return { ok: true };
   }
 
-  async audit(adminId: string, cursor?: string) {
+  async audit(_adminId: string, cursor?: string) {
     cursor = this.validateCursor(cursor);
-    return this.page(await this.prisma.adminAuditLog.findMany({ where: { adminId }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 51, ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}) }));
+    return this.page(await this.prisma.adminAuditLog.findMany({ orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 51, ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}) }));
   }
 }

@@ -514,7 +514,6 @@ export class AuthService {
         email: photographer.email,
         name: photographer.name,
         plan: photographer.plan,
-        isAdmin: photographer.systemRole === "admin",
         notificationPreferences: photographer.notificationPreferences,
         hasAvatar: Boolean(photographer.avatarKey),
         hasDriveConnected: this.computeDriveConnected(photographer),

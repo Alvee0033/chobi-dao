@@ -49,7 +49,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             email: profile.email,
             name: profile.name,
             plan: profile.plan,
-            isAdmin: profile.isAdmin,
             hasDriveConnected: resolveDriveConnected(profile, resolveDriveConnected(saved)),
             driveRootFolderId: profile.driveRootFolderId ?? null
           };

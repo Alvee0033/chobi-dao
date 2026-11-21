@@ -4,7 +4,7 @@ import { parseEnv } from "../../config/env";
 import { Reflector } from "@nestjs/core";
 import { AUTH_ROLES_KEY, type AuthRole } from "../auth/auth-role.decorator";
 
-type AccessTokenPayload = { sub: string; email: string; role?: AuthRole };
+type AccessTokenPayload = { sub: string; email: string; role?: AuthRole; ver?: number };
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
@@ -15,7 +15,7 @@ export class JwtAuthGuard implements CanActivate {
     if (!auth?.startsWith("Bearer ")) throw new UnauthorizedException("Missing bearer token");
     try {
       const payload = jwt.verify(auth.slice(7), parseEnv().JWT_ACCESS_SECRET) as AccessTokenPayload;
-      req.user = { id: payload.sub, email: payload.email, role: payload.role ?? "photographer" };
+      req.user = { id: payload.sub, email: payload.email, role: payload.role ?? "photographer", tokenVersion: payload.ver };
       const requiredRoles = this.reflector.getAllAndOverride<AuthRole[]>(AUTH_ROLES_KEY, [
         context.getHandler(),
         context.getClass()

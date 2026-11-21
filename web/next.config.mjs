@@ -2,11 +2,8 @@
 const nextConfig = {
   reactStrictMode: true,
   output: "standalone",
-  async rewrites() {
-    return [{
-      source: "/admin/:path*",
-      destination: "http://admin:3100/admin/:path*"
-    }];
+  async redirects() {
+    return [{ source: "/admin/:path*", destination: "https://owner-chobi.203.96.190.78.sslip.io/:path*", permanent: false }];
   },
   async headers() {
     return [{
