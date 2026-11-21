@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { parseEnv } from "../../config/env";
 import { randomUUID } from "crypto";
 import { acceptedMatch, MATCH_CANDIDATE_THRESHOLD, validateScanEmbeddings } from "./matching";
+import { guestCanRemoveOriginal } from "./photo-removal-policy";
 
 const GUEST_GALLERY_PAGE_SIZE = 48;
 
@@ -107,6 +108,7 @@ export class SearchService {
           `SELECT photo_id, MAX(1 - (embedding <=> $1::vector)) AS similarity
            FROM "face_embeddings"
            WHERE event_id = $2::uuid AND (1 - (embedding <=> $1::vector)) >= $3
+             AND EXISTS (SELECT 1 FROM "photos" p WHERE p.id = "face_embeddings".photo_id AND p.deleted_at IS NULL)
            GROUP BY photo_id`,
           vector,
           event.id,
@@ -178,7 +180,7 @@ export class SearchService {
     const pageIds = photoIds.slice(offset, offset + GUEST_GALLERY_PAGE_SIZE);
     if (!pageIds.length) return [];
     const photos = await this.prisma.photo.findMany({
-      where: { id: { in: pageIds }, eventId, indexStatus: "indexed" },
+      where: { id: { in: pageIds }, eventId, indexStatus: "indexed", deletedAt: null },
     });
     const byId = new Map(photos.map((photo) => [photo.id, photo]));
     return pageIds.flatMap((photoId, index) => {
@@ -223,6 +225,40 @@ export class SearchService {
     const session = await this.prisma.guestSession.findUnique({ where: { sessionToken } });
     if (!session || session.eventId !== event.id || session.expiresAt <= new Date()) throw new UnauthorizedException("Invalid or expired search session");
     throw new HttpException("ZIP downloads are not available yet. Download matched photos individually.", HttpStatus.NOT_IMPLEMENTED);
+  }
+
+  async requestPhotoRemoval(slug: string, sessionToken: string, photoId: string) {
+    if (!sessionToken || !photoId) throw new UnauthorizedException("A valid gallery session is required");
+    const event = await this.prisma.event.findUnique({ where: { slug }, select: { id: true } });
+    if (!event) throw new NotFoundException("Event not found");
+    const session = await this.prisma.guestSession.findUnique({ where: { sessionToken } });
+    if (!session || session.eventId !== event.id || session.expiresAt <= new Date() || !session.matchedPhotoIds.includes(photoId)) {
+      throw new UnauthorizedException("This photo is not part of your active gallery session");
+    }
+    const photo = await this.prisma.photo.findFirst({ where: { id: photoId, eventId: event.id, deletedAt: null } });
+    if (!photo) throw new NotFoundException("Photo not found");
+    if (guestCanRemoveOriginal(photo)) {
+      const now = new Date();
+      await this.prisma.$transaction(async (tx) => {
+        await tx.photo.update({ where: { id: photo.id }, data: { deletedAt: now } });
+        await tx.event.update({ where: { id: event.id }, data: { totalPhotos: { decrement: 1 }, indexedPhotos: { decrement: 1 } } });
+        const sessions = await tx.guestSession.findMany({ where: { eventId: event.id, matchedPhotoIds: { has: photoId } }, select: { id: true, matchedPhotoIds: true, matchedScores: true } });
+        for (const active of sessions) {
+          const indexes = active.matchedPhotoIds.map((id, index) => id === photoId ? index : -1).filter((index) => index >= 0);
+          await tx.guestSession.update({ where: { id: active.id }, data: {
+            matchedPhotoIds: active.matchedPhotoIds.filter((id) => id !== photoId),
+            matchedScores: active.matchedScores.filter((_, index) => !indexes.includes(index)),
+          } });
+        }
+      });
+      return { status: "removed", recoverableUntil: new Date(now.getTime() + 30 * 86400000).toISOString() };
+    }
+    const request = await this.prisma.photoRemovalRequest.upsert({
+      where: { photoId_guestSessionId: { photoId, guestSessionId: session.id } },
+      create: { eventId: event.id, photoId, guestSessionId: session.id },
+      update: { status: "pending", reviewedAt: null },
+    });
+    return { status: request.status === "pending" ? "review_requested" : request.status };
   }
 
   async zipStatus(slug: string, jobId: string) {

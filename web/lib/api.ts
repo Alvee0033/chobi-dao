@@ -33,6 +33,7 @@ export type AuthUser = {
   email: string;
   name?: string | null;
   plan: string;
+  isAdmin?: boolean;
   hasDriveConnected?: boolean;
   driveRootFolderId?: string | null;
 };
@@ -356,6 +357,10 @@ export async function getGuestSessionPhotos(slug: string, sessionToken: string, 
   });
 }
 
+export async function requestGuestPhotoRemoval(slug: string, sessionToken: string, photoId: string) {
+  return json<{ status: "removed" | "review_requested" | "approved" | "rejected"; recoverableUntil?: string }>(`/v1/search/${encodeURIComponent(slug)}/photos/${encodeURIComponent(photoId)}/removal-request`, { method: "POST", headers: { "x-search-session": sessionToken } });
+}
+
 export async function createZip(slug: string, sessionToken: string): Promise<{ jobId: string }> {
   return json<{ jobId: string }>(`/v1/search/${encodeURIComponent(slug)}/zip`, {
     method: "POST",
@@ -406,12 +411,15 @@ export async function getEventIndexStatus(token: string, eventId: string): Promi
   });
 }
 
-export async function getEventPhotos(token: string, eventId: string, includeProcessing = true, personId?: string): Promise<EventPhoto[]> {
+export type EventPhotoPage = { items: EventPhoto[]; nextCursor: string | null; hasMore: boolean };
+export async function getEventPhotos(token: string, eventId: string, includeProcessing = true, personId?: string, cursor?: string | null, limit = 48): Promise<EventPhotoPage> {
   const params = new URLSearchParams();
+  params.set("limit", String(limit));
   if (includeProcessing) params.set("includeProcessing", "true");
   if (personId) params.set("personId", personId);
+  if (cursor) params.set("cursor", cursor);
   const qs = params.toString() ? `?${params.toString()}` : "";
-  return json<EventPhoto[]>(`/v1/events/${encodeURIComponent(eventId)}/photos${qs}`, {
+  return json<EventPhotoPage>(`/v1/events/${encodeURIComponent(eventId)}/photos${qs}`, {
     headers: { Authorization: `Bearer ${token}` }
   });
 }
@@ -428,6 +436,12 @@ export async function deletePhoto(token: string, eventId: string, photoId: strin
     headers: { Authorization: `Bearer ${token}` }
   });
 }
+export type PhotoRemovalRequest = { id: string; eventId: string; photoId: string; guestSessionId: string; status: string; createdAt: string; fileName: string | null; thumbUrl?: string };
+export async function getPhotoRemovalRequests(token: string, eventId: string) { return json<PhotoRemovalRequest[]>(`/v1/events/${encodeURIComponent(eventId)}/photo-removal-requests`, { headers: { Authorization: `Bearer ${token}` } }); }
+export async function reviewPhotoRemovalRequest(token: string, eventId: string, requestId: string, approve: boolean) { return json<{ ok: true }>(`/v1/events/${encodeURIComponent(eventId)}/photo-removal-requests/${encodeURIComponent(requestId)}`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ approve }) }); }
+export type DeletedEventPhoto = { id: string; fileName: string | null; deletedAt: string | null };
+export async function getDeletedEventPhotos(token: string, eventId: string) { return json<DeletedEventPhoto[]>(`/v1/events/${encodeURIComponent(eventId)}/deleted-photos`, { headers: { Authorization: `Bearer ${token}` } }); }
+export async function restoreEventPhoto(token: string, eventId: string, photoId: string) { return json<{ ok: true }>(`/v1/events/${encodeURIComponent(eventId)}/photos/${encodeURIComponent(photoId)}/restore`, { method: "POST", headers: { Authorization: `Bearer ${token}` } }); }
 
 export async function retryPhoto(token: string, eventId: string, photoId: string): Promise<{ ok: true }> {
   return json<{ ok: true }>(`/v1/events/${encodeURIComponent(eventId)}/photos/${encodeURIComponent(photoId)}/retry`, {

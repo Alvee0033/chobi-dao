@@ -12,6 +12,7 @@ export type DashboardAuthState = {
   email: string;
   name?: string | null;
   plan: string;
+  isAdmin?: boolean;
   hasDriveConnected: boolean;
   driveRootFolderId?: string | null;
 };

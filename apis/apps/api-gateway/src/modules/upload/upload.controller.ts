@@ -48,12 +48,14 @@ export class UploadController {
     @Param("id") id: string,
     @Query("includeProcessing") includeProcessing?: string,
     @Query("personId") personId?: string,
+    @Query("limit") limit?: string,
+    @Query("cursor") cursor?: string,
   ) {
     const headers = (req as unknown as { headers?: { host?: string; "x-forwarded-proto"?: string } }).headers ?? {};
     const proto = headers["x-forwarded-proto"] ?? "http";
     const host = headers.host ?? "localhost:3001";
     const apiBase = `${proto}://${host}`;
-    return this.upload.photos(req.user.id, id, includeProcessing === "true", apiBase, personId);
+    return this.upload.photos(req.user.id, id, includeProcessing === "true", apiBase, personId, Number(limit) || 48, cursor);
   }
   @Get("people")
   people(@Req() req: { user: { id: string } }, @Param("id") id: string) {
@@ -82,6 +84,10 @@ export class UploadController {
   @Get("index-status") status(@Req() req: { user: { id: string } }, @Param("id") id: string) { return this.upload.status(req.user.id, id); }
   @Post("photos/:photoId/retry") retry(@Req() req: { user: { id: string } }, @Param("id") id: string, @Param("photoId") photoId: string) { return this.upload.retry(req.user.id, id, photoId); }
   @Delete("photos/:photoId") remove(@Req() req: { user: { id: string } }, @Param("id") id: string, @Param("photoId") photoId: string) { return this.upload.deletePhoto(req.user.id, id, photoId); }
+  @Get("photo-removal-requests") removalRequests(@Req() req: { user: { id: string }; headers: { host?: string; "x-forwarded-proto"?: string } }, @Param("id") id: string) { const proto = req.headers["x-forwarded-proto"] ?? "http"; const host = req.headers.host ?? "localhost:3001"; return this.upload.removalRequests(req.user.id, id, `${proto}://${host}`); }
+  @Post("photo-removal-requests/:requestId") reviewRemovalRequest(@Req() req: { user: { id: string } }, @Param("id") id: string, @Param("requestId") requestId: string, @Body() body: { approve?: boolean }) { return this.upload.reviewRemovalRequest(req.user.id, id, requestId, body.approve === true); }
+  @Get("deleted-photos") deletedPhotos(@Req() req: { user: { id: string } }, @Param("id") id: string) { return this.upload.deletedPhotos(req.user.id, id); }
+  @Post("photos/:photoId/restore") restorePhoto(@Req() req: { user: { id: string } }, @Param("id") id: string, @Param("photoId") photoId: string) { return this.upload.restorePhoto(req.user.id, id, photoId); }
 }
 
 @Controller("v1/media")

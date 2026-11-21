@@ -514,6 +514,7 @@ export class AuthService {
         email: photographer.email,
         name: photographer.name,
         plan: photographer.plan,
+        isAdmin: photographer.systemRole === "admin",
         notificationPreferences: photographer.notificationPreferences,
         hasAvatar: Boolean(photographer.avatarKey),
         hasDriveConnected: this.computeDriveConnected(photographer),
@@ -550,7 +551,12 @@ export class AuthService {
     const challengeId = randomUUID();
     const expiresAt = new Date(now.getTime() + 2 * 60_000);
     await this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`${ipHash}:${event.id}`}))`;
+      await tx.$queryRaw`
+        WITH lock_result AS MATERIALIZED (
+          SELECT pg_advisory_xact_lock(hashtext(${`${ipHash}:${event.id}`}))
+        )
+        SELECT 1::int AS locked FROM lock_result
+      `;
       await tx.livenessChallenge.deleteMany({ where: { expiresAt: { lte: now } } });
       const recentChallenges = await tx.livenessChallenge.count({
         where: { ipHash, eventId: event.id, createdAt: { gt: new Date(now.getTime() - 60_000) } },

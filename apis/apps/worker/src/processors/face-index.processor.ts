@@ -99,7 +99,7 @@ export class FaceIndexProcessor extends WorkerHost {
     const photo = await this.prisma.photo.findUnique({
       where: { id: photoId },
     });
-    if (!photo || photo.indexStatus === "indexed") return { ok: true };
+    if (!photo || photo.deletedAt || photo.indexStatus === "indexed") return { ok: true };
 
     const storageKey = photo.s3Key || photo.driveFileId || driveFileId;
 
@@ -177,26 +177,18 @@ export class FaceIndexProcessor extends WorkerHost {
 
       }
 
-      await this.prisma.photo.update({
-        where: { id: photoId },
-        data: {
-          indexStatus: "indexed",
-          faceCount,
-          indexedAt: new Date(),
-          processingErrorCode: null,
-        },
+      const indexed = await this.prisma.$transaction(async (tx) => {
+        const result = await tx.photo.updateMany({ where: { id: photoId, deletedAt: null }, data: { indexStatus: "indexed", faceCount, indexedAt: new Date(), processingErrorCode: null } });
+        if (result.count === 1) await tx.event.update({ where: { id: eventId }, data: { indexedPhotos: { increment: 1 }, status: "active" } });
+        return result.count;
       });
-
-      await this.prisma.event.update({
-        where: { id: eventId },
-        data: { indexedPhotos: { increment: 1 }, status: "active" },
-      });
+      if (indexed !== 1) return { ok: true, deleted: true };
 
       return { ok: true, faceCount };
     } catch (error) {
       console.error(`Worker error indexing photo ${photoId}:`, error);
-      await this.prisma.photo.update({
-        where: { id: photoId },
+      await this.prisma.photo.updateMany({
+        where: { id: photoId, deletedAt: null },
         data: { indexStatus: "failed", faceCount: 0, processingErrorCode: "FACE_INDEX_FAILED" },
       }).catch(() => undefined);
       throw error;

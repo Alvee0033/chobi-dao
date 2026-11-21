@@ -228,15 +228,15 @@ export class UploadService {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event || event.photographerId !== photographerId || event.deletedAt) throw new NotFoundException("Event not found");
     const [total, indexed, failed, inProgress] = await Promise.all([
-      this.prisma.photo.count({ where: { eventId } }),
-      this.prisma.photo.count({ where: { eventId, indexStatus: "indexed" } }),
-      this.prisma.photo.count({ where: { eventId, indexStatus: "failed" } }),
-      this.prisma.photo.count({ where: { eventId, indexStatus: { in: ["uploaded", "indexing"] } } })
+      this.prisma.photo.count({ where: { eventId, deletedAt: null } }),
+      this.prisma.photo.count({ where: { eventId, deletedAt: null, indexStatus: "indexed" } }),
+      this.prisma.photo.count({ where: { eventId, deletedAt: null, indexStatus: "failed" } }),
+      this.prisma.photo.count({ where: { eventId, deletedAt: null, indexStatus: { in: ["uploaded", "indexing"] } } })
     ]);
     return { total, indexed, failed, inProgress };
   }
 
-  async photos(photographerId: string, eventId: string, includeProcessing = false, apiBase?: string, personId?: string) {
+  async photos(photographerId: string, eventId: string, includeProcessing = false, apiBase?: string, personId?: string, rawLimit = 48, cursor?: string) {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event || event.photographerId !== photographerId || event.deletedAt) throw new NotFoundException("Event not found");
     let personPhotoIds: string[] | undefined;
@@ -249,14 +249,32 @@ export class UploadService {
       });
       personPhotoIds = [...new Set(faces.map((f) => f.photoId))];
     }
+    const limit = Number.isSafeInteger(rawLimit) ? Math.min(100, Math.max(1, rawLimit)) : 48;
+    let cursorData: { uploadedAt: string; id: string } | undefined;
+    if (cursor) {
+      try {
+        cursorData = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
+        if (!cursorData?.id || !Number.isFinite(Date.parse(cursorData.uploadedAt))) throw new Error("invalid");
+      } catch {
+        throw new BadRequestException("Invalid photo cursor");
+      }
+    }
     const photos = await this.prisma.photo.findMany({
       where: {
         eventId,
+        deletedAt: null,
         ...(personPhotoIds ? { id: { in: personPhotoIds } } : {}),
-        ...(includeProcessing ? {} : { indexStatus: "indexed" })
+        ...(includeProcessing ? {} : { indexStatus: "indexed" }),
+        ...(cursorData ? { OR: [
+          { uploadedAt: { lt: new Date(cursorData.uploadedAt) } },
+          { uploadedAt: new Date(cursorData.uploadedAt), id: { lt: cursorData.id } }
+        ] } : {})
       },
-      orderBy: { uploadedAt: "desc" },
+      orderBy: [{ uploadedAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
     });
+    const hasMore = photos.length > limit;
+    if (hasMore) photos.pop();
     const withUrls = await Promise.all(
       photos.map(async (photo) => {
         const statusMap = {
@@ -298,7 +316,12 @@ export class UploadService {
         };
       })
     );
-    return withUrls;
+    const last = photos.at(-1);
+    return {
+      items: withUrls,
+      hasMore,
+      nextCursor: hasMore && last ? Buffer.from(JSON.stringify({ uploadedAt: last.uploadedAt.toISOString(), id: last.id })).toString("base64url") : null
+    };
   }
 
   private async consolidatePeople(eventId: string): Promise<void> {
@@ -453,7 +476,7 @@ export class UploadService {
   async getPhotoMedia(photoId: string, variant: "image" | "thumb", token: string) {
     this.verifyMediaToken(token, photoId, variant);
     const photo = await this.prisma.photo.findUnique({
-      where: { id: photoId },
+      where: { id: photoId, deletedAt: null },
     });
     if (!photo) throw new NotFoundException("Media not found");
 
@@ -483,13 +506,11 @@ export class UploadService {
   async deletePhoto(photographerId: string, eventId: string, photoId: string) {
     const photo = await this.prisma.photo.findUnique({ where: { id: photoId }, include: { event: true } });
     if (!photo || photo.eventId !== eventId || photo.event.photographerId !== photographerId) throw new NotFoundException("Photo not found");
-    if (photo.s3Key) await this.storage.deleteFile(photo.s3Key).catch(() => undefined);
-    if (photo.s3KeyThumb) await this.storage.deleteFile(photo.s3KeyThumb).catch(() => undefined);
-    if (photo.driveFileId) await this.storage.deleteFile(photo.driveFileId).catch(() => undefined);
+    if (photo.deletedAt) return { ok: true };
     const wasIndexed = photo.indexStatus === "indexed";
 
     await this.prisma.$transaction([
-      this.prisma.photo.delete({ where: { id: photoId } }),
+      this.prisma.photo.update({ where: { id: photoId }, data: { deletedAt: new Date() } }),
       this.prisma.event.update({
         where: { id: eventId },
         data: {
@@ -509,6 +530,48 @@ export class UploadService {
     this.invalidatePeopleCache(eventId);
 
     return { ok: true };
+  }
+
+  async removalRequests(photographerId: string, eventId: string, apiBase?: string) {
+    const event = await this.prisma.event.findFirst({ where: { id: eventId, photographerId, deletedAt: null }, select: { id: true } });
+    if (!event) throw new NotFoundException("Event not found");
+    const requests = await this.prisma.photoRemovalRequest.findMany({
+      where: { eventId, status: "pending" }, orderBy: { createdAt: "asc" }, take: 100, include: { photo: true },
+    });
+    return requests.map(({ photo, ...request }) => ({ ...request, fileName: photo.fileName, thumbUrl: apiBase ? this.buildMediaUrl(apiBase, photo.id, "thumb") : undefined }));
+  }
+
+  async deletedPhotos(photographerId: string, eventId: string) {
+    const event = await this.prisma.event.findFirst({ where: { id: eventId, photographerId, deletedAt: null }, select: { id: true } });
+    if (!event) throw new NotFoundException("Event not found");
+    return this.prisma.photo.findMany({ where: { eventId, deletedAt: { gte: new Date(Date.now() - 30 * 86400000) } }, orderBy: { deletedAt: "desc" }, take: 100, select: { id: true, fileName: true, deletedAt: true } });
+  }
+
+  async restorePhoto(photographerId: string, eventId: string, photoId: string) {
+    const photo = await this.prisma.photo.findFirst({ where: { id: photoId, eventId, deletedAt: { gte: new Date(Date.now() - 30 * 86400000) }, event: { photographerId } } });
+    if (!photo) throw new NotFoundException("Recoverable photo not found");
+    await this.prisma.$transaction([
+      this.prisma.photo.update({ where: { id: photoId }, data: { deletedAt: null } }),
+      this.prisma.event.update({ where: { id: eventId }, data: { totalPhotos: { increment: 1 }, ...(photo.indexStatus === "indexed" ? { indexedPhotos: { increment: 1 } } : {}) } }),
+    ]);
+    return { ok: true };
+  }
+
+  async reviewRemovalRequest(photographerId: string, eventId: string, requestId: string, approve: boolean) {
+    const [request, ownedEvent] = await Promise.all([
+      this.prisma.photoRemovalRequest.findFirst({ where: { id: requestId, eventId, status: "pending" } }),
+      this.prisma.event.findFirst({ where: { id: eventId, photographerId, deletedAt: null }, select: { id: true } }),
+    ]);
+    if (!request || !ownedEvent) throw new NotFoundException("Removal request not found");
+    await this.prisma.$transaction(async (tx) => {
+      await tx.photoRemovalRequest.update({ where: { id: requestId }, data: { status: approve ? "approved" : "rejected", reviewedAt: new Date() } });
+      if (approve) {
+        const photo = await tx.photo.findFirst({ where: { id: request.photoId, eventId, deletedAt: null } });
+        if (photo) await tx.photo.update({ where: { id: photo.id }, data: { deletedAt: new Date() } });
+        if (photo) await tx.event.update({ where: { id: eventId }, data: { totalPhotos: { decrement: 1 }, ...(photo.indexStatus === "indexed" ? { indexedPhotos: { decrement: 1 } } : {}) } });
+      }
+    });
+    return { ok: true, status: approve ? "approved" : "rejected" };
   }
 }
 

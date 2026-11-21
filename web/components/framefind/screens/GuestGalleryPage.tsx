@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, memo } from "react";
-import { type SearchPhoto, getGuestSessionPhotos } from "@/lib/api";
+import { type SearchPhoto, getGuestSessionPhotos, requestGuestPhotoRemoval } from "@/lib/api";
 import { Icons } from "../icons";
 import type { ShowToast } from "../types";
 import { ClayButton } from "../ui/ClayButton";
@@ -17,6 +17,7 @@ const PhotoCard = memo(function PhotoCard({
   toggleSelect,
   downloadSingle,
   onOpenLightbox
+  ,onRemovePhoto
 }: {
   photo: SearchPhoto;
   idx: number;
@@ -26,6 +27,7 @@ const PhotoCard = memo(function PhotoCard({
   toggleSelect: (id: string) => void;
   downloadSingle: (url: string, filename: string) => void;
   onOpenLightbox: (idx: number) => void;
+  onRemovePhoto: (photoId: string) => void;
 }) {
   return (
     <div 
@@ -93,6 +95,7 @@ const PhotoCard = memo(function PhotoCard({
             >
               <Icons.Download size={16} />
             </button>
+            <button onClick={(e) => { e.stopPropagation(); onRemovePhoto(photo.id); }} className="rounded-full border border-white/70 bg-white/95 p-2.5 text-stone-700 shadow-xl" title="Remove from event" aria-label="Remove this photo from the event"><Icons.Trash size={16} /></button>
           </div>
         )}
       </div>
@@ -123,6 +126,7 @@ export function GuestGalleryPage({
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [visibleCount, setVisibleCount] = useState(16);
   const [photos, setPhotos] = useState(initialPhotos);
+  const [removingPhotoId, setRemovingPhotoId] = useState<string | null>(null);
   const [nextOffset, setNextOffset] = useState(initialOffset);
   const [loadingMore, setLoadingMore] = useState(false);
   const loadingMoreRef = useRef(false);
@@ -196,6 +200,20 @@ export function GuestGalleryPage({
       return next;
     });
   }, []);
+
+  const removeGuestPhoto = useCallback(async (photoId: string) => {
+    if (removingPhotoId) return;
+    const confirmed = window.confirm("Remove this photo from the event? Solo photos are removed immediately. Group photos are sent to the photographer for review.");
+    if (!confirmed) return;
+    setRemovingPhotoId(photoId);
+    try {
+      const result = await requestGuestPhotoRemoval(slug, sessionToken, photoId);
+      setPhotos((current) => current.filter((photo) => photo.id !== photoId));
+      setSelectedIds((current) => { const next = new Set(current); next.delete(photoId); return next; });
+      showToast(result.status === "removed" ? "Photo removed from the event." : "Request sent to the photographer for review.");
+    } catch (error) { showToast(error instanceof Error ? error.message : "Could not request photo removal."); }
+    finally { setRemovingPhotoId(null); }
+  }, [removingPhotoId, slug, sessionToken, showToast]);
 
   const handleSelectAll = () => {
     if (selectedIds.size === photos.length) {
@@ -361,6 +379,7 @@ export function GuestGalleryPage({
                   slug={slug}
                   toggleSelect={toggleSelectPhoto}
                   downloadSingle={downloadSinglePhoto}
+                  onRemovePhoto={removeGuestPhoto}
                   onOpenLightbox={(index) => setLightboxIndex(index)}
                 />
               ))}

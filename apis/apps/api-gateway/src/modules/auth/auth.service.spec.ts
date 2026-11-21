@@ -96,8 +96,19 @@ describe("AuthService email verification", () => {
 
   it("issues a short-lived single-use scan challenge and persists it", async () => {
     prisma.event.findUnique.mockResolvedValue({ id: "event-1", status: "active", deletedAt: null });
+    const advisoryQuery = jest.fn().mockResolvedValue([{ locked: 1 }]);
+    prisma.$transaction.mockImplementationOnce(async (run: any) => run({
+      $queryRaw: advisoryQuery,
+      livenessChallenge: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+        count: jest.fn().mockResolvedValue(0),
+        create: jest.fn().mockResolvedValue({}),
+      },
+    }));
     const result = await service.createLivenessToken("wedding", "127.0.0.1");
     expect(result.livenessToken).toEqual(expect.any(String));
+    const [sql] = advisoryQuery.mock.calls[0];
+    expect(sql.join("?")).toMatch(/WITH\s+lock_result\s+AS\s+MATERIALIZED[\s\S]*SELECT\s+1::int\s+AS\s+locked/i);
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 

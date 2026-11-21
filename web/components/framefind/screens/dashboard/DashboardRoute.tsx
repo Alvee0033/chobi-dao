@@ -25,6 +25,12 @@ export function DashboardRoute() {
     if (!isLoading && !auth) router.replace("/auth");
   }, [auth, isLoading, router]);
 
+  useEffect(() => {
+    const handleToast = (event: Event) => setToastMessage((event as CustomEvent<string>).detail || "");
+    window.addEventListener("chobi-toast", handleToast);
+    return () => window.removeEventListener("chobi-toast", handleToast);
+  }, []);
+
   if (isLoading || !auth) {
     return <DashboardLoading />;
   }

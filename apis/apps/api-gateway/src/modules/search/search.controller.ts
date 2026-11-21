@@ -29,6 +29,11 @@ export class SearchController {
     return this.search.createZip(slug, sessionToken);
   }
 
+  @Post(":slug/photos/:photoId/removal-request")
+  requestPhotoRemoval(@Param("slug") slug: string, @Param("photoId") photoId: string, @Headers("x-search-session") sessionToken: string) {
+    return this.search.requestPhotoRemoval(slug, sessionToken, photoId);
+  }
+
   @Get(":slug/zip/:jobId")
   zipStatus(@Param("slug") slug: string, @Param("jobId") jobId: string) {
     return this.search.zipStatus(slug, jobId);

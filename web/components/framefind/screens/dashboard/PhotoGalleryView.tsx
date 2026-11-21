@@ -1,6 +1,6 @@
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState, memo } from "react";
-import { getEventPeople, getEventPhotos, deletePhoto, type EventPhoto, type EventPerson } from "@/lib/api";
+import { getEventPeople, getEventPhotos, deletePhoto, getPhotoRemovalRequests, reviewPhotoRemovalRequest, getDeletedEventPhotos, restoreEventPhoto, type EventPhoto, type EventPerson, type PhotoRemovalRequest, type DeletedEventPhoto } from "@/lib/api";
 import { Icons } from "../../icons";
 import type { ShowToast } from "../../types";
 import { ClayButton } from "../../ui/ClayButton";
@@ -161,6 +161,11 @@ export function PhotoGalleryView({
   const [personMenuPosition, setPersonMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [visibleCount, setVisibleCount] = useState(16);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasMorePages, setHasMorePages] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [removalRequests, setRemovalRequests] = useState<PhotoRemovalRequest[]>([]);
+  const [deletedPhotos, setDeletedPhotos] = useState<DeletedEventPhoto[]>([]);
 
   // Reset visible count if selected person or eventId changes
   useEffect(() => {
@@ -168,12 +173,13 @@ export function PhotoGalleryView({
   }, [eventId, selectedPersonId]);
 
   useEffect(() => {
-    if (visibleCount >= photos.length) return;
+    if (visibleCount >= photos.length && !hasMorePages) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
-          setVisibleCount((prev) => Math.min(prev + 16, photos.length));
+          if (visibleCount < photos.length) setVisibleCount((prev) => Math.min(prev + 16, photos.length));
+          else if (hasMorePages && !loadingMore) void loadMorePhotos();
         }
       },
       { threshold: 0.1, rootMargin: "300px" }
@@ -189,7 +195,7 @@ export function PhotoGalleryView({
         observer.unobserve(target);
       }
     };
-  }, [visibleCount, photos.length]);
+  }, [visibleCount, photos.length, hasMorePages, loadingMore]);
 
   const handlePersonLongPressStart = (personId: string) => {
     longPressTimerRef.current = setTimeout(() => {
@@ -213,11 +219,39 @@ export function PhotoGalleryView({
     try {
       if (!silent) setLoading(true);
       const data = await withRefresh((token) => getEventPhotos(token, eventId, true, selectedPersonId ?? undefined));
-      setPhotos(data);
+      if (silent) {
+        setPhotos((current) => {
+          const firstPageIds = new Set(data.items.map((photo) => photo.id));
+          return current.length > data.items.length ? [...data.items, ...current.filter((photo) => !firstPageIds.has(photo.id))] : data.items;
+        });
+        if (photos.length <= data.items.length) {
+          setNextCursor(data.nextCursor);
+          setHasMorePages(data.hasMore);
+        }
+      } else {
+        setPhotos(data.items);
+        setNextCursor(data.nextCursor);
+        setHasMorePages(data.hasMore);
+      }
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Failed to load photos");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMorePhotos = async () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const data = await withRefresh((token) => getEventPhotos(token, eventId, true, selectedPersonId ?? undefined, nextCursor));
+      setPhotos((prev) => [...prev, ...data.items]);
+      setNextCursor(data.nextCursor);
+      setHasMorePages(data.hasMore);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Failed to load more photos");
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -233,9 +267,37 @@ export function PhotoGalleryView({
     }
   };
 
+  const loadRemovalRequests = async () => {
+    try {
+      const [requests, deleted] = await Promise.all([withRefresh((token) => getPhotoRemovalRequests(token, eventId)), withRefresh((token) => getDeletedEventPhotos(token, eventId))]);
+      setRemovalRequests(requests);
+      setDeletedPhotos(deleted);
+    }
+    catch { setRemovalRequests([]); }
+  };
+
+  const restoreDeletedPhoto = async (photoId: string) => {
+    try {
+      await withRefresh((token) => restoreEventPhoto(token, eventId, photoId));
+      setDeletedPhotos((current) => current.filter((photo) => photo.id !== photoId));
+      void loadPhotos(true);
+      showToast("Photo restored to the event.");
+    } catch { showToast("This photo is no longer recoverable."); }
+  };
+
+  const reviewRemoval = async (requestId: string, approve: boolean) => {
+    try {
+      await withRefresh((token) => reviewPhotoRemovalRequest(token, eventId, requestId, approve));
+      setRemovalRequests((current) => current.filter((request) => request.id !== requestId));
+      if (approve) void loadPhotos(true);
+      showToast(approve ? "Photo removed from the event." : "Request declined.");
+    } catch { showToast("Could not update the removal request."); }
+  };
+
   useEffect(() => {
     loadPhotos();
     loadPeople();
+    loadRemovalRequests();
   }, [eventId, selectedPersonId]);
 
   const eventUploads = useMemo(() => {
@@ -343,6 +405,9 @@ export function PhotoGalleryView({
         </label>
         </div>
       </header>
+
+      {removalRequests.length > 0 && <section className="mb-5 rounded-2xl border border-orange-200 bg-orange-50/70 p-4" aria-label="Guest photo removal requests"><div className="mb-3 flex items-center justify-between"><strong className="text-sm text-stone-900">Guest removal requests</strong><span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-orange-800">{removalRequests.length} pending</span></div><div className="flex flex-wrap gap-2">{removalRequests.map((request) => <div key={request.id} className="flex items-center gap-3 rounded-xl border border-orange-100 bg-white px-3 py-2 text-xs">{request.thumbUrl && <img src={request.thumbUrl} alt="" className="h-10 w-10 rounded-lg object-cover" loading="lazy" /> }<span className="max-w-40 truncate" title={request.fileName || request.photoId}>{request.fileName || `Photo ${request.photoId.slice(0, 8)}`}</span><button onClick={() => void reviewRemoval(request.id, true)} className="font-bold text-orange-700">Remove</button><button onClick={() => void reviewRemoval(request.id, false)} className="text-stone-500">Keep</button></div>)}</div></section>}
+      {deletedPhotos.length > 0 && <section className="mb-5 rounded-2xl border border-stone-200 bg-white p-4" aria-label="Recently removed photos"><div className="mb-3 flex items-center justify-between"><strong className="text-sm text-stone-900">Recently removed</strong><span className="text-xs text-stone-500">Recoverable for 30 days</span></div><div className="flex flex-wrap gap-2">{deletedPhotos.map((photo) => <div key={photo.id} className="flex items-center gap-3 rounded-xl border border-stone-100 bg-stone-50 px-3 py-2 text-xs"><span className="max-w-48 truncate">{photo.fileName || photo.id.slice(0, 8)}</span><button onClick={() => void restoreDeletedPhoto(photo.id)} className="font-bold text-orange-700">Restore</button></div>)}</div></section>}
 
       {uploadSummary && uploadSummary.total > 0 && (
         <div className="mb-6 rounded-2xl border border-orange-200 bg-white px-5 py-4 shadow-sm" role="status" aria-live="polite">
@@ -530,7 +595,7 @@ export function PhotoGalleryView({
           {eventUploads.slice(0, 12).map((item) => (
             <ClayCard key={item.id} className="group p-2 relative overflow-hidden bg-white border border-orange-100">
               <div className="aspect-square rounded-xl overflow-hidden relative">
-                <Image src={item.previewObjectUrl} alt={item.fileName} fill className="object-cover opacity-70" unoptimized />
+                {item.previewObjectUrl ? <Image src={item.previewObjectUrl} alt={item.fileName} fill className="object-cover opacity-70" unoptimized /> : <div className="absolute inset-0 bg-gradient-to-br from-orange-100 to-amber-50" aria-hidden="true" />}
                 <div className="absolute inset-0 bg-charcoal/45 flex flex-col items-center justify-center gap-2 text-white">
                   <div className="text-[11px] font-black uppercase">{item.status}</div>
                   <div className="w-20 h-1.5 bg-white/25 rounded-full overflow-hidden">

@@ -163,6 +163,21 @@ services:
     depends_on:
       - api-gateway
 
+  admin:
+    build:
+      context: ./admin-app
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${API_BASE_URL:?Set API_BASE_URL to the public API URL}
+    restart: always
+    environment:
+      NODE_ENV: production
+      PORT: 3100
+    expose:
+      - "3100"
+    depends_on:
+      - api-gateway
+
 volumes:
   postgres_data:
   redis_data:

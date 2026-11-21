@@ -2,9 +2,9 @@ export type UploadItem = {
   id: string;
   photoId?: string;
   eventId: string;
-  file: File;
+  file?: File;
   fileName: string;
-  previewObjectUrl: string;
+  previewObjectUrl?: string;
   progress: number;
   status: "queued" | "uploading" | "processing" | "ready" | "failed" | "canceled";
   fileHash?: string;

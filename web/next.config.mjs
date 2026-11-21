@@ -2,6 +2,12 @@
 const nextConfig = {
   reactStrictMode: true,
   output: "standalone",
+  async rewrites() {
+    return [{
+      source: "/admin/:path*",
+      destination: "http://admin:3100/admin/:path*"
+    }];
+  },
   async headers() {
     return [{
       source: "/assets/chobidao.webp",

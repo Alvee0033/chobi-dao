@@ -8,6 +8,7 @@ import { UploadModule } from "./modules/upload/upload.module";
 import { SearchModule } from "./modules/search/search.module";
 import { AnalyticsModule } from "./modules/analytics/analytics.module";
 import { BillingModule } from "./modules/billing/billing.module";
+import { AdminModule } from "./modules/admin/admin.module";
 
 const env = parseEnv();
 void env;
@@ -20,7 +21,8 @@ void env;
     UploadModule,
     SearchModule,
     AnalyticsModule,
-    BillingModule
+    BillingModule,
+    AdminModule
   ],
   controllers: [AppController]
 })

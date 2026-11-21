@@ -12,7 +12,8 @@
     "test:integration": "jest --config ./test/jest.integration.json",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
-    "prisma:seed": "tsx prisma/seed.ts"
+    "prisma:seed": "tsx prisma/seed.ts",
+    "admin:grant": "tsx prisma/grant-admin.ts"
   },
   "dependencies": {
     "@aws-sdk/client-rekognition": "^3.1053.0",
