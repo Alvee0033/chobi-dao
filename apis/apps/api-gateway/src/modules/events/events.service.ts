@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../../common/services/prisma.service";
 import { ObjectStorageService } from "../../common/services/storage.service";
 import slugify from "slugify";
@@ -11,8 +11,6 @@ import { parseEnv } from "../../config/env";
 @Injectable()
 export class EventsService {
   private readonly env = parseEnv();
-  private readonly pendingCoverUploads = new Map<string, { photographerId: string; eventId: string; fileName: string; contentType: string }>();
-  private readonly resolvedCoverUploads = new Map<string, string>();
   constructor(private readonly prisma: PrismaService, private readonly storage: ObjectStorageService) {}
   private readonly qrStyle = {
     errorCorrectionLevel: "M" as const,
@@ -58,27 +56,31 @@ export class EventsService {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event || event.photographerId !== photographerId || event.deletedAt) throw new NotFoundException("Event not found");
 
+    const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+    if (!allowedTypes.has(dto.contentType)) throw new BadRequestException("Unsupported cover image format");
+    await this.prisma.coverUpload.deleteMany({ where: { expiresAt: { lte: new Date() } } });
     const token = randomUUID();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
     const coverToken = `cover-upload:${token}`;
-    this.pendingCoverUploads.set(token, {
-      photographerId,
-      eventId,
-      fileName: dto.fileName,
-      contentType: dto.contentType || "image/jpeg",
+    await this.prisma.coverUpload.create({
+      data: { id: token, photographerId, eventId, fileName: dto.fileName, contentType: dto.contentType, expiresAt },
     });
     const uploadUrl = `/v1/events/${encodeURIComponent(eventId)}/cover-upload-direct/${encodeURIComponent(token)}`;
     return {
       key: coverToken,
       uploadUrl,
-      expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      expiresAt: expiresAt.toISOString(),
       requiredHeaders: { "Content-Type": dto.contentType }
     };
   }
 
   async uploadCoverDirect(photographerId: string, eventId: string, token: string, body: Buffer, contentType: string) {
-    const pending = this.pendingCoverUploads.get(token);
-    if (!pending || pending.eventId !== eventId || pending.photographerId !== photographerId) {
+    const pending = await this.prisma.coverUpload.findUnique({ where: { id: token } });
+    if (!pending || pending.eventId !== eventId || pending.photographerId !== photographerId || pending.expiresAt <= new Date() || pending.resolvedKey) {
       throw new NotFoundException("Cover upload session not found");
+    }
+    if (body.byteLength < 1 || body.byteLength > 10 * 1024 * 1024 || contentType !== pending.contentType) {
+      throw new BadRequestException("Cover upload does not match its reservation");
     }
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event || event.photographerId !== photographerId || event.deletedAt) throw new NotFoundException("Event not found");
@@ -87,13 +89,14 @@ export class EventsService {
       event.slug,
       `cover-${token}`,
       pending.fileName,
-      contentType || pending.contentType,
+      pending.contentType,
       body,
     );
 
-    await this.prisma.event.update({ where: { id: eventId }, data: { coverPhotoKey: stored.key } });
-    this.resolvedCoverUploads.set(token, stored.key);
-    this.pendingCoverUploads.delete(token);
+    await this.prisma.$transaction([
+      this.prisma.event.update({ where: { id: eventId }, data: { coverPhotoKey: stored.key, coverPhotoMimeType: pending.contentType } }),
+      this.prisma.coverUpload.update({ where: { id: token }, data: { resolvedKey: stored.key } }),
+    ]);
     return { ok: true, coverPhotoKey: stored.key };
   }
 
@@ -106,9 +109,15 @@ export class EventsService {
   async update(photographerId: string, id: string, dto: UpdateEventDto) {
     await this.get(photographerId, id);
     let resolvedCoverPhotoKey = dto.coverPhotoKey;
+    let resolvedCoverPhotoMimeType: string | undefined;
     if (resolvedCoverPhotoKey?.startsWith("cover-upload:")) {
       const token = resolvedCoverPhotoKey.slice("cover-upload:".length);
-      resolvedCoverPhotoKey = this.resolvedCoverUploads.get(token) ?? undefined;
+      const resolved = await this.prisma.coverUpload.findFirst({
+        where: { id: token, eventId: id, photographerId, expiresAt: { gt: new Date() }, resolvedKey: { not: null } },
+        select: { resolvedKey: true, contentType: true },
+      });
+      resolvedCoverPhotoKey = resolved?.resolvedKey ?? undefined;
+      resolvedCoverPhotoMimeType = resolved?.contentType;
     }
     const event = await this.prisma.event.update({
       where: { id },
@@ -119,7 +128,8 @@ export class EventsService {
         location: dto.location,
         expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
         status: dto.status,
-        coverPhotoKey: resolvedCoverPhotoKey
+        coverPhotoKey: resolvedCoverPhotoKey,
+        coverPhotoMimeType: resolvedCoverPhotoMimeType,
       }
     });
     return this.withDisplayFields(event);
@@ -151,8 +161,10 @@ export class EventsService {
 
   private async withDisplayFields(event: any) {
     const thumbnailUrl = event.coverPhotoKey ? `${this.env.API_BASE_URL.replace(/\/+$/, "")}/v1/e/${event.slug}/cover` : null;
+    const safeEvent = { ...event };
+    delete safeEvent.passwordHash;
     return {
-      ...event,
+      ...safeEvent,
       thumbnailUrl,
       coverPhotoUrl: thumbnailUrl,
     };

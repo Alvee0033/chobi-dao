@@ -41,9 +41,12 @@ class HeroFloatingDockItem extends HeroDockItem {
 /// - Triggers [HeroQuickActionSheet] (New Event, Upload Photos, Scan QR).
 /// - Haptic feedback on touches ([HapticFeedback.selectionClick]).
 /// - Responsive sizing: clamped to max 320dp on narrow screens like Fold 4 outer screen.
-class HeroFloatingDock extends StatefulWidget {
+class HeroFloatingDock extends StatefulWidget implements PreferredSizeWidget {
   /// Current active tab index (0 to items.length - 1).
   final int currentIndex;
+
+  @override
+  Size get preferredSize => Size.fromHeight(height + 16.0);
 
   /// Callback when a dock tab is selected.
   final ValueChanged<int>? onIndexChanged;
@@ -82,19 +85,19 @@ class HeroFloatingDock extends StatefulWidget {
   /// Center button tooltip.
   final String centerTooltip;
 
-  /// Maximum width of the dock. Defaults to 320dp on narrow displays and 340dp on regular displays.
+  /// Maximum width of the dock. Defaults to 300dp on narrow displays and 320dp on regular displays.
   final double? maxWidth;
 
-  /// Height of the dock. Defaults to 62dp.
+  /// Height of the dock. Defaults to 50dp.
   final double height;
 
   /// Whether to use a glassmorphic blurred backdrop. Defaults to true.
   final bool isGlassmorphic;
 
-  /// Outer margin around the dock. Defaults to bottom 20dp.
+  /// Outer margin around the dock. Defaults to bottom 8dp.
   final EdgeInsetsGeometry margin;
 
-  /// Dock border radius. Defaults to 32dp.
+  /// Dock border radius. Defaults to 26dp.
   final double borderRadius;
 
   const HeroFloatingDock({
@@ -113,10 +116,10 @@ class HeroFloatingDock extends StatefulWidget {
     this.centerIcon,
     this.centerTooltip = 'Quick Actions',
     this.maxWidth,
-    this.height = 62.0,
+    this.height = 50.0,
     this.isGlassmorphic = true,
-    this.margin = const EdgeInsets.only(bottom: 20.0, left: 16.0, right: 16.0),
-    this.borderRadius = 32.0,
+    this.margin = const EdgeInsets.only(bottom: 8.0, left: 16.0, right: 16.0),
+    this.borderRadius = 26.0,
   }) : assert(
           onIndexChanged != null || onTabSelected != null,
           'Either onIndexChanged or onTabSelected must be provided.',
@@ -213,14 +216,14 @@ class _HeroFloatingDockState extends State<HeroFloatingDock> {
 
     final screenWidth = MediaQuery.sizeOf(context).width;
 
-    // Responsive sizing: max width 320dp on narrow screens like Fold 4 outer screen (344dp width)
-    final effectiveMaxWidth = widget.maxWidth ?? (screenWidth < 360 ? 320.0 : 340.0);
-    final clampedWidth = (screenWidth - 24.0).clamp(280.0, effectiveMaxWidth);
+    // Responsive sizing: max width 300dp on narrow screens, 320dp on regular displays
+    final effectiveMaxWidth = widget.maxWidth ?? (screenWidth < 360 ? 300.0 : 320.0);
+    final clampedWidth = (screenWidth - 24.0).clamp(270.0, effectiveMaxWidth);
 
     Widget dockContent = Container(
       width: clampedWidth,
       height: widget.height,
-      padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 5.0),
+      padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 3.0),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: widget.isGlassmorphic ? 0.90 : 1.0),
         borderRadius: BorderRadius.circular(widget.borderRadius),
@@ -360,12 +363,12 @@ class _DockItemButton extends StatelessWidget {
                   alignment: Alignment.center,
                   children: [
                     AnimatedScale(
-                      scale: isSelected ? 1.10 : 1.0,
+                      scale: isSelected ? 1.08 : 1.0,
                       duration: const Duration(milliseconds: 200),
                       curve: Curves.easeOutBack,
                       child: Icon(
                         iconData,
-                        size: 21,
+                        size: 18,
                         color: isSelected
                             ? AppColors.brandOrange
                             : AppColors.charcoalMuted,
@@ -379,20 +382,20 @@ class _DockItemButton extends StatelessWidget {
                       ),
                   ],
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 1.5),
 
                 // Label
                 AnimatedDefaultTextStyle(
                   duration: const Duration(milliseconds: 200),
                   curve: Curves.easeInOut,
                   style: TextStyle(
-                    fontSize: 9.5,
+                    fontSize: 9.0,
                     fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                     color: isSelected
                         ? AppColors.brandOrangeDark
                         : AppColors.textSecondary,
                     letterSpacing: -0.2,
-                    height: 1.1,
+                    height: 1.0,
                   ),
                   child: Text(
                     item.label,
@@ -406,8 +409,8 @@ class _DockItemButton extends StatelessWidget {
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 220),
                   curve: Curves.easeOutCubic,
-                  width: isSelected ? 10 : 0,
-                  height: 2.5,
+                  width: isSelected ? 8 : 0,
+                  height: 2.0,
                   decoration: BoxDecoration(
                     color: isSelected ? AppColors.brandOrange : Colors.transparent,
                     borderRadius: BorderRadius.circular(2),
@@ -415,7 +418,7 @@ class _DockItemButton extends StatelessWidget {
                         ? [
                             BoxShadow(
                               color: AppColors.brandOrange.withValues(alpha: 0.5),
-                              blurRadius: 4,
+                              blurRadius: 3,
                               offset: const Offset(0, 1),
                             ),
                           ]
@@ -469,22 +472,22 @@ class _CenterActionButtonState extends State<_CenterActionButton> {
             duration: const Duration(milliseconds: 140),
             curve: Curves.easeOutQuad,
             child: Container(
-              width: 44,
-              height: 44,
+              width: 38,
+              height: 38,
               decoration: BoxDecoration(
                 gradient: AppColors.orangeGradient,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(14),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.brandOrange.withValues(alpha: 0.42),
-                    blurRadius: 16,
-                    offset: const Offset(0, 5),
+                    color: AppColors.brandOrange.withValues(alpha: 0.38),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
                     spreadRadius: 0,
                   ),
                   const BoxShadow(
                     color: Color(0x1F2D1807), // 0xFF2D1807 at 0.12 alpha
-                    blurRadius: 5,
-                    offset: Offset(0, 2),
+                    blurRadius: 4,
+                    offset: Offset(0, 1),
                     spreadRadius: 0,
                   ),
                 ],
@@ -494,7 +497,7 @@ class _CenterActionButtonState extends State<_CenterActionButton> {
                     const Icon(
                       Icons.add_rounded,
                       color: Colors.white,
-                      size: 26,
+                      size: 21,
                     ),
               ),
             ),

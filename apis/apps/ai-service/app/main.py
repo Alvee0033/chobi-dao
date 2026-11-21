@@ -1,15 +1,19 @@
 import os
 import io
 import logging
+import warnings
 import numpy as np
 from PIL import Image, ImageOps, UnidentifiedImageError
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 logger = logging.getLogger("ai-service")
 logging.basicConfig(level=logging.INFO)
 
 app = FastAPI(title="Chobi Dao AI Service", version="2.0.0")
+MAX_ANALYZE_BYTES = int(os.getenv("MAX_ANALYZE_BYTES", str(32 * 1024 * 1024)))
+Image.MAX_IMAGE_PIXELS = int(os.getenv("MAX_IMAGE_PIXELS", "40000000"))
 
 MODEL_READY = False
 face_app = None
@@ -77,10 +81,18 @@ async def analyze(file: UploadFile = File(...)):
     if face_app is None:
         raise HTTPException(status_code=503, detail="Face model unavailable")
     try:
-        data = await file.read()
-        image = ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB")
-    except (UnidentifiedImageError, OSError, ValueError) as exc:
+        data = await file.read(MAX_ANALYZE_BYTES + 1)
+        if len(data) > MAX_ANALYZE_BYTES:
+            raise HTTPException(status_code=413, detail="Image is too large")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            image = ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB")
+    except HTTPException:
+        raise
+    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
         raise HTTPException(status_code=400, detail="Invalid image") from exc
+    finally:
+        await file.close()
 
     max_dim = int(os.getenv("MAX_IMAGE_DIM", "2400"))
     if max(image.size) > max_dim:
@@ -88,7 +100,7 @@ async def analyze(file: UploadFile = File(...)):
         image = image.resize((max(1, round(image.width * scale)), max(1, round(image.height * scale))), Image.Resampling.LANCZOS)
 
     try:
-        return {"faces": detect_faces(image)}
+        return {"faces": await run_in_threadpool(detect_faces, image)}
     except Exception as exc:
         logger.exception("Face inference failed")
         raise HTTPException(status_code=503, detail="Face analysis failed") from exc

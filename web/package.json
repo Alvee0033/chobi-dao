@@ -5,11 +5,12 @@
   "scripts": {
     "dev": "next dev",
     "video:studio": "remotion studio video/index.ts",
-    "video:render": "remotion render video/index.ts ChobiDaoLaunch video/out/chobi-dao-launch.mp4",
+    "video:render": "python3 video/scripts/render-audio.py && remotion render video/index.ts ChobiDaoShowcase4K video/out/chobi-dao-showcase-4k.mp4 --codec h264 --crf 17 --x264-preset fast --concurrency=2",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "video:audio": "python3 video/scripts/render-audio.py"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "0.10.21",
@@ -17,21 +18,24 @@
     "daisyui": "^4.12.14",
     "framer-motion": "^14.14.0",
     "lucide-react": "^1.74.0",
-    "next": "14.2.5",
-    "react": "18.2.0",
-    "react-dom": "18.2.0",
+    "next": "16.4.6",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "sharp": "^0.35.5",
     "tailwind-merge": "^3.7.0"
   },
   "devDependencies": {
     "@remotion/cli": "^4.0.544",
     "@types/node": "20.14.10",
-    "@types/react": "18.3.3",
-    "@types/react-dom": "18.3.0",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
     "autoprefixer": "10.4.19",
-    "postcss": "8.4.39",
+    "postcss": "8.5.33",
     "remotion": "^4.0.544",
     "tailwindcss": "3.4.7",
     "typescript": "5.5.3"
+  },
+  "overrides": {
+    "postcss": "8.5.33"
   }
 }

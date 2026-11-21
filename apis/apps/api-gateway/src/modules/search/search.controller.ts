@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, Post, Req } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Param, Post, Query } from "@nestjs/common";
 import { SearchService } from "./search.service";
 
 @Controller("v1/search")
@@ -7,15 +7,21 @@ export class SearchController {
 
   @Post(":slug")
   searchByFace(
-    @Req() req: { headers: { host?: string; "x-forwarded-proto"?: string } },
     @Param("slug") slug: string,
     @Headers("x-liveness-token") livenessToken: string,
     @Body() dto: { image?: string; images?: string[] },
   ) {
-    const proto = req.headers["x-forwarded-proto"] ?? "http";
-    const host = req.headers.host ?? "localhost:3001";
-    const apiBase = `${proto}://${host}`;
-    return this.search.search(slug, livenessToken, dto?.images ?? (dto?.image ? [dto.image] : []), apiBase);
+    return this.search.search(slug, livenessToken, dto?.images ?? (dto?.image ? [dto.image] : []));
+  }
+
+  @Get(":slug/photos")
+  sessionPhotos(
+    @Param("slug") slug: string,
+    @Headers("x-search-session") sessionToken: string,
+    @Query("offset") rawOffset = "0",
+  ) {
+    const offset = Number(rawOffset);
+    return this.search.getSessionPhotos(slug, sessionToken, offset);
   }
 
   @Post(":slug/zip")

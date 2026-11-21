@@ -4,7 +4,7 @@ import { GoogleDriveStorageService } from "../../common/services/storage.service
 import { AuthEmailService } from "./auth-email.service";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
+import { createHmac, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
 import { google } from "googleapis";
 import sharp from "sharp";
 import { parseEnv } from "../../config/env";
@@ -536,7 +536,7 @@ export class AuthService {
     return { ok: true };
   }
 
-  async createLivenessToken(eventSlug: string, challengeType: string) {
+  async createLivenessToken(eventSlug: string, clientIp: string) {
     const event = await this.prisma.event.findUnique({ where: { slug: eventSlug } });
     if (!event || event.deletedAt || event.status === "expired") {
       throw new UnauthorizedException("Event not available");
@@ -545,10 +545,25 @@ export class AuthService {
     if (!searchEnabled) {
       throw new ConflictException("Face matching is not enabled yet for this event");
     }
+    const now = new Date();
+    const ipHash = createHmac("sha256", this.env.SEARCH_SESSION_SECRET).update(clientIp || "unknown").digest("hex");
+    const challengeId = randomUUID();
+    const expiresAt = new Date(now.getTime() + 2 * 60_000);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`${ipHash}:${event.id}`}))`;
+      await tx.livenessChallenge.deleteMany({ where: { expiresAt: { lte: now } } });
+      const recentChallenges = await tx.livenessChallenge.count({
+        where: { ipHash, eventId: event.id, createdAt: { gt: new Date(now.getTime() - 60_000) } },
+      });
+      if (recentChallenges >= 30) {
+        throw new HttpException("Too many scan attempts. Please wait a minute and try again.", HttpStatus.TOO_MANY_REQUESTS);
+      }
+      await tx.livenessChallenge.create({ data: { id: challengeId, eventId: event.id, ipHash, expiresAt } });
+    });
     const token = jwt.sign(
-      { eventSlug },
+      { eventSlug, jti: challengeId },
       this.env.LIVENESS_TOKEN_SECRET,
-      { expiresIn: "10m" }
+      { expiresIn: "2m" }
     );
     return { livenessToken: token };
   }

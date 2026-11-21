@@ -168,9 +168,53 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     if (confirmed == true) {
       if (!mounted) return;
       final provider = context.read<EventProvider>();
+      final messenger = ScaffoldMessenger.of(context);
+
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              SizedBox(width: 12),
+              Text('Deleting event...'),
+            ],
+          ),
+          duration: Duration(seconds: 4),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
       final ok = await provider.deleteEvent(_currentEvent.id);
+      if (!mounted) return;
+      messenger.hideCurrentSnackBar();
+
       if (ok) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('"${_currentEvent.name}" deleted successfully.'),
+            backgroundColor: AppColors.charcoal,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
         navigator.pop();
+      } else {
+        final errorMsg = provider.errorMessage;
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(errorMsg != null && errorMsg.isNotEmpty
+                ? errorMsg
+                : 'Failed to delete event. Please check your connection.'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     }
   }

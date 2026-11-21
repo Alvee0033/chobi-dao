@@ -12,9 +12,9 @@ const config: Config = {
         xs: "420px",
       },
       fontFamily: {
-        sans: ['"Plus Jakarta Sans"', '"DM Sans"', "sans-serif"],
-        heading: ['"Fraunces"', "Georgia", "serif"],
-        serif: ['"Fraunces"', '"Playfair Display"', "Georgia", "serif"]
+        sans: ["var(--font-plus-jakarta)", '"DM Sans"', "sans-serif"],
+        heading: ["var(--font-fraunces)", "Georgia", "serif"],
+        serif: ["var(--font-fraunces)", '"Playfair Display"', "Georgia", "serif"]
       },
       colors: {
         canvas: "#FAF6F0",

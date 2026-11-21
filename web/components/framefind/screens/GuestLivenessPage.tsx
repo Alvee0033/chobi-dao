@@ -90,7 +90,7 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
   }, []);
   const [phase, setPhase] = useState<Phase>("init");
   const [startupMessage, setStartupMessage] = useState("Allow camera access to begin");
-  const [guideMode, setGuideMode] = useState<"landmarks" | "timed">("landmarks");
+  const [guideMode, setGuideMode] = useState<"landmarks">("landmarks");
   const [errorMessage, setErrorMessage] = useState("");
   const [capturedImages, setCapturedImages] = useState<string[]>([]);
   const [guidance, setGuidance] = useState<FaceGuidance>("no-face");
@@ -136,6 +136,8 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
         photos: result.photos,
         sessionToken: result.sessionToken,
         indexingCount: result.indexingCount,
+        totalCount: result.count,
+        nextOffset: result.nextOffset,
       });
       setPhase("success");
       showToast(`Found ${result.count} matched photos!`);
@@ -165,8 +167,6 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
     let stableSince = 0;
     let cooldownUntil = 0;
     let stepIndex = 0;
-    let timedStepStart = 0;
-    let modelTimedOut = false;
     const images: string[] = [];
 
     const stopCamera = () => {
@@ -189,7 +189,6 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
       stableSince = 0;
       setHoldProgress(0);
       cooldownUntil = timestamp + 1000;
-      timedStepStart = timestamp + 1000;
       playCaptureChime();
       if (stepIndex === captureSteps.length) {
         stopped = true;
@@ -199,29 +198,6 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
       }
       setGuidance(stepIndex === 1 ? "turn-left" : "turn-right");
       speak(`Captured. ${captureSteps[stepIndex].instruction}`);
-    };
-
-    const timedScanFrame = (timestamp: number) => {
-      if (stopped) return;
-      const video = videoRef.current;
-      if (video && video.readyState >= 2) {
-        if (!timedStepStart) timedStepStart = timestamp;
-        const elapsed = Math.max(0, timestamp - timedStepStart);
-        setHoldProgress(Math.min(100, Math.round((elapsed / 3000) * 100)));
-        if (elapsed >= 3000) {
-          try {
-            captureStep(video, timestamp);
-            if (stopped) return;
-          } catch (error) {
-            stopped = true;
-            stopCamera();
-            setErrorMessage(error instanceof Error ? error.message : "Camera capture failed.");
-            setPhase("error");
-            return;
-          }
-        }
-      }
-      animationFrame = requestAnimationFrame(timedScanFrame);
     };
 
     const scanFrame = (timestamp: number) => {
@@ -247,13 +223,10 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
             setHoldProgress(0);
           }
         } catch (error) {
-          modelTimedOut = true;
-          landmarker?.close();
-          landmarker = null;
-          setGuideMode("timed");
-          setHoldProgress(0);
-          speak(`${captureSteps[stepIndex].instruction}. Hold each pose until it captures automatically.`);
-          animationFrame = requestAnimationFrame(timedScanFrame);
+          stopped = true;
+          stopCamera();
+          setErrorMessage("Face guidance stopped unexpectedly. Please retry the scan.");
+          setPhase("error");
           return;
         }
       }
@@ -282,28 +255,17 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
         ]);
         if (stopped) { stopCamera(); return; }
 
-        // Start scanning immediately in timed mode — no waiting for MediaPipe
-        setGuideMode("timed");
+        const vision = await FilesetResolver.forVisionTasks("/mediapipe/wasm");
+        const model = await FaceLandmarker.createFromOptions(vision, {
+          baseOptions: { modelAssetPath: "/mediapipe/face_landmarker.task", delegate: "CPU" },
+          runningMode: "VIDEO",
+          numFaces: 2,
+        });
+        if (stopped) { model.close(); return; }
+        landmarker = model;
+        setGuideMode("landmarks");
         setPhase("scan");
-        animationFrame = requestAnimationFrame(timedScanFrame);
-
-        // Load MediaPipe in background and upgrade to landmark mode when ready
-        try {
-          const vision = await FilesetResolver.forVisionTasks("/mediapipe/wasm");
-          const model = await FaceLandmarker.createFromOptions(vision, {
-            baseOptions: { modelAssetPath: "/mediapipe/face_landmarker.task", delegate: "CPU" },
-            runningMode: "VIDEO",
-            numFaces: 2,
-          });
-          if (stopped || modelTimedOut) { model.close(); return; }
-          // Upgrade: cancel timed loop, switch to landmark-based scan
-          cancelAnimationFrame(animationFrame);
-          landmarker = model;
-          setGuideMode("landmarks");
-          animationFrame = requestAnimationFrame(scanFrame);
-        } catch {
-          // MediaPipe failed — stay in timed mode (already running)
-        }
+        animationFrame = requestAnimationFrame(scanFrame);
       } catch (error) {
         if (stopped) return;
         stopped = true;
@@ -627,7 +589,7 @@ export function GuestLivenessPage({ showToast, slug }: { showToast: ShowToast; s
               aria-live="polite"
             >
               {scanning
-                ? (guideMode === "timed" ? "Hold pose... Auto-capturing" : guidanceText[guidance])
+                ? guidanceText[guidance]
                 : phase === "error"
                 ? (errorMessage || "Camera blocked — Click 'Retry camera scan' to allow")
                 : phase === "camera"

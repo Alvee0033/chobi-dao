@@ -6,6 +6,8 @@ export type GuestSearchSession = {
   sessionToken: string;
   photos: SearchPhoto[];
   indexingCount?: number;
+  totalCount?: number;
+  nextOffset?: number;
 };
 
 export function saveGuestSearchSession(slug: string, payload: GuestSearchSession) {

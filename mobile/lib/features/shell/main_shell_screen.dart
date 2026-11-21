@@ -450,48 +450,75 @@ class _MainShellScreenState extends State<MainShellScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
+
     return Scaffold(
       backgroundColor: AppColors.creamCanvas,
-      body: IndexedStack(
-        index: _currentIndex,
+      body: Stack(
         children: [
-          DashboardScreen(
-            onNavigateToTab: _onTabSelected,
+          // All pages inside IndexedStack fill the entire screen
+          Positioned.fill(
+            child: IndexedStack(
+              index: _currentIndex,
+              children: [
+                DashboardScreen(
+                  onNavigateToTab: _onTabSelected,
+                ),
+                const EventListScreen(),
+                const AnalyticsScreen(),
+                const SettingsScreen(),
+              ],
+            ),
           ),
-          const EventListScreen(),
-          const AnalyticsScreen(),
-          const SettingsScreen(),
-        ],
-      ),
-      bottomNavigationBar: HeroFloatingDock(
-        currentIndex: _currentIndex,
-        onTabSelected: _onTabSelected,
-        onCenterAction: () => _showQuickActionsSheet(context),
-        leftItems: const [
-          HeroFloatingDockItem(
-            icon: Icons.grid_view_outlined,
-            activeIcon: Icons.grid_view_rounded,
-            label: 'Dashboard',
+
+          // Floating minimal dock strictly anchored at the bottom
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: AnimatedSlide(
+              offset: keyboardVisible ? const Offset(0, 1.5) : Offset.zero,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              child: SafeArea(
+                top: false,
+                left: false,
+                right: false,
+                bottom: true,
+                child: HeroFloatingDock(
+                currentIndex: _currentIndex,
+                onTabSelected: _onTabSelected,
+                onCenterAction: () => _showQuickActionsSheet(context),
+                leftItems: const [
+                  HeroFloatingDockItem(
+                    icon: Icons.grid_view_outlined,
+                    activeIcon: Icons.grid_view_rounded,
+                    label: 'Dashboard',
+                  ),
+                  HeroFloatingDockItem(
+                    icon: Icons.event_seat_outlined,
+                    activeIcon: Icons.event_seat_rounded,
+                    label: 'Events',
+                  ),
+                ],
+                rightItems: const [
+                  HeroFloatingDockItem(
+                    icon: Icons.bar_chart_outlined,
+                    activeIcon: Icons.bar_chart_rounded,
+                    label: 'Analytics',
+                  ),
+                  HeroFloatingDockItem(
+                    icon: Icons.tune_outlined,
+                    activeIcon: Icons.tune_rounded,
+                    label: 'Settings',
+                  ),
+                ],
+              ),
+            ),
           ),
-          HeroFloatingDockItem(
-            icon: Icons.event_seat_outlined,
-            activeIcon: Icons.event_seat_rounded,
-            label: 'Events',
-          ),
-        ],
-        rightItems: const [
-          HeroFloatingDockItem(
-            icon: Icons.bar_chart_outlined,
-            activeIcon: Icons.bar_chart_rounded,
-            label: 'Analytics',
-          ),
-          HeroFloatingDockItem(
-            icon: Icons.tune_outlined,
-            activeIcon: Icons.tune_rounded,
-            label: 'Settings',
-          ),
-        ],
-      ),
-    );
+        ),
+      ],
+    ),
+  );
   }
 }

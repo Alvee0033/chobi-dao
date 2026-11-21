@@ -9,6 +9,8 @@ import { parseEnv } from "../../config/env";
 import { Queue } from "bullmq";
 
 const FREE_STORAGE_BYTES = 1024 ** 3;
+const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
 
 @Injectable()
 export class UploadService {
@@ -57,38 +59,55 @@ export class UploadService {
 
     const photographer = await this.prisma.photographer.findUnique({ where: { id: photographerId }, select: { plan: true, trialEndsAt: true } });
     if (!photographer) throw new NotFoundException("Photographer not found");
+    if (!Number.isSafeInteger(dto.fileSizeBytes) || dto.fileSizeBytes < 1 || dto.fileSizeBytes > MAX_UPLOAD_BYTES) {
+      throw new BadRequestException(`Photo size must be between 1 byte and ${MAX_UPLOAD_BYTES} bytes`);
+    }
+    if (!ALLOWED_IMAGE_TYPES.has(dto.contentType)) throw new BadRequestException("Unsupported photo format");
     const paidSubscription = await this.prisma.subscription.findFirst({
       where: { photographerId, status: "succeeded", currentPeriodEnd: { gt: new Date() } }, select: { id: true },
     });
     const pro = Boolean(paidSubscription) || photographer.trialEndsAt > new Date();
-    if (!pro) {
-      const [usage, photoCount] = await Promise.all([
-        this.prisma.photo.aggregate({ where: { event: { photographerId } }, _sum: { fileSizeBytes: true } }),
-        this.prisma.photo.count({ where: { event: { photographerId } } }),
-      ]);
-      if (photoCount >= 200 || Number(usage._sum.fileSizeBytes || 0n) + dto.fileSizeBytes > FREE_STORAGE_BYTES) {
-        throw new HttpException("Free plan limit reached. Upgrade to Chobi Dao Pro to continue uploading.", HttpStatus.PAYMENT_REQUIRED);
-      }
-    } else {
-      const usage = await this.prisma.photo.aggregate({ where: { event: { photographerId } }, _sum: { fileSizeBytes: true } });
-      if (Number(usage._sum.fileSizeBytes || 0n) + dto.fileSizeBytes > 20 * FREE_STORAGE_BYTES) {
-        throw new HttpException("Your 20 GB storage limit has been reached.", HttpStatus.PAYMENT_REQUIRED);
-      }
-    }
 
     const photoId = randomUUID();
     const uploadUrl = `${apiBase}/v1/events/${encodeURIComponent(eventId)}/photos/${encodeURIComponent(photoId)}/upload-direct`;
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
     try {
-      await this.prisma.photo.create({
-        data: {
-          id: photoId,
-          eventId,
-          fileName: dto.fileName,
-          fileSizeBytes: BigInt(dto.fileSizeBytes),
-          fileHash: dto.fileHash,
-          mimeType: dto.contentType,
-          indexStatus: "pending",
-        },
+      await this.prisma.$transaction(async (tx) => {
+        // Serialize reservations per account so simultaneous upload requests cannot oversubscribe storage.
+        await tx.$queryRaw`SELECT id FROM photographers WHERE id = ${photographerId}::uuid FOR UPDATE`;
+        const stale = await tx.photo.findMany({
+          where: {
+            event: { photographerId }, indexStatus: "pending",
+            OR: [
+              { uploadExpiresAt: { lte: new Date() } },
+              { uploadExpiresAt: null, uploadedAt: { lte: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+            ],
+          },
+          select: { id: true, eventId: true },
+        });
+        if (stale.length) {
+          await tx.photo.deleteMany({ where: { id: { in: stale.map((item) => item.id) } } });
+          const byEvent = new Map<string, number>();
+          for (const item of stale) byEvent.set(item.eventId, (byEvent.get(item.eventId) ?? 0) + 1);
+          await Promise.all([...byEvent].map(([staleEventId, count]) => tx.event.update({
+            where: { id: staleEventId }, data: { totalPhotos: { decrement: count } },
+          })));
+        }
+        const [usage, photoCount] = await Promise.all([
+          tx.photo.aggregate({ where: { event: { photographerId } }, _sum: { fileSizeBytes: true } }),
+          tx.photo.count({ where: { event: { photographerId } } }),
+        ]);
+        const storageLimit = pro ? 20 * FREE_STORAGE_BYTES : FREE_STORAGE_BYTES;
+        if ((!pro && photoCount >= 200) || Number(usage._sum.fileSizeBytes || 0n) + dto.fileSizeBytes > storageLimit) {
+          throw new HttpException(pro ? "Your 20 GB storage limit has been reached." : "Free plan limit reached. Upgrade to Chobi Dao Pro to continue uploading.", HttpStatus.PAYMENT_REQUIRED);
+        }
+        await tx.photo.create({
+          data: {
+            id: photoId, eventId, fileName: dto.fileName, fileSizeBytes: BigInt(dto.fileSizeBytes),
+            fileHash: dto.fileHash, mimeType: dto.contentType, indexStatus: "pending", uploadExpiresAt: expiresAt,
+          },
+        });
+        await tx.event.update({ where: { id: eventId }, data: { totalPhotos: { increment: 1 } } });
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -96,12 +115,11 @@ export class UploadService {
       }
       throw error;
     }
-    await this.prisma.event.update({ where: { id: eventId }, data: { totalPhotos: { increment: 1 } } });
     return {
       photoId,
       uploadUrl,
       key: "",
-      expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      expiresAt: expiresAt.toISOString(),
       requiredHeaders: {
         "Content-Type": dto.contentType,
         ...(authHeader ? { Authorization: authHeader } : {}),
@@ -114,6 +132,11 @@ export class UploadService {
     if (!event || event.photographerId !== photographerId || event.deletedAt) throw new NotFoundException("Event not found");
     const photo = await this.prisma.photo.findUnique({ where: { id: photoId } });
     if (!photo || photo.eventId !== eventId) throw new NotFoundException("Photo not found");
+    if (photo.indexStatus !== "pending" || !photo.uploadExpiresAt || photo.uploadExpiresAt <= new Date()) {
+      throw new ConflictException("Upload session expired. Please start the upload again.");
+    }
+    if (body.byteLength !== Number(photo.fileSizeBytes)) throw new BadRequestException("Uploaded size does not match the reserved file size");
+    if (!ALLOWED_IMAGE_TYPES.has(contentType) || contentType !== photo.mimeType) throw new BadRequestException("Uploaded content type does not match the upload session");
 
     // 1. Upload to local storage bucket (MinIO / Local FS)
     const stored = await this.storage.uploadPhoto(
@@ -137,6 +160,7 @@ export class UploadService {
         fileSizeBytes: BigInt(body.byteLength),
         indexStatus: "indexing",
         faceCount: 0,
+        uploadExpiresAt: null,
       },
     });
 

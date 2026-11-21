@@ -8,11 +8,39 @@ import { AppModule } from "./app.module";
 import { parseEnv } from "./config/env";
 import { GlobalHttpExceptionFilter } from "./common/filters/http-exception.filter";
 
+type RequestLogInput = {
+  method?: string;
+  url?: string;
+  hostname?: string;
+  host?: string;
+  headers?: { host?: string };
+  ip?: string;
+  socket?: { remoteAddress?: string };
+};
+
+function sanitizeRequestLog(input: unknown) {
+  const request = input as RequestLogInput;
+  return {
+    method: request.method ?? "UNKNOWN",
+    url: (request.url ?? "").split("?", 1)[0],
+    host: request.hostname ?? request.host ?? request.headers?.host,
+    remoteAddress: request.ip ?? request.socket?.remoteAddress,
+  };
+}
+
 async function bootstrap() {
   const env = parseEnv();
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({ logger: true, bodyLimit: 100 * 1024 * 1024 }),
+    new FastifyAdapter({
+      logger: {
+        serializers: {
+          req: sanitizeRequestLog,
+        },
+      },
+      trustProxy: env.TRUST_PROXY ? env.TRUST_PROXY.split(",").map((entry) => entry.trim()).filter(Boolean) : false,
+      bodyLimit: 12 * 1024 * 1024,
+    }),
   );
   const fastify = app.getHttpAdapter().getInstance();
   fastify.addContentTypeParser(
@@ -22,10 +50,14 @@ async function bootstrap() {
   );
   await app.register(cookie);
   await app.register(multipart);
+  const allowedOrigins = new Set([
+    new URL(env.APP_BASE_URL).origin,
+    ...env.CORS_ORIGINS.split(",").map((origin) => origin.trim()).filter(Boolean),
+  ]);
   app.enableCors({
     origin: (requestOrigin, callback) => {
-      // allow all origins to avoid CORS issues, especially from production domain to vercel backend
-      callback(null, true);
+      if (!requestOrigin || allowedOrigins.has(requestOrigin)) return callback(null, true);
+      return callback(new Error("Origin is not allowed by CORS"), false);
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],

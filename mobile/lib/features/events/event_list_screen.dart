@@ -194,7 +194,54 @@ class _EventListScreenState extends State<EventListScreen> {
                   ),
                 );
                 if (confirm == true && mounted) {
-                  context.read<EventProvider>().deleteEvent(event.id);
+                  final messenger = ScaffoldMessenger.of(context);
+                  final eventName = event.name;
+                  messenger.showSnackBar(
+                    const SnackBar(
+                      content: Row(
+                        children: [
+                          SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          ),
+                          SizedBox(width: 12),
+                          Text('Deleting event...'),
+                        ],
+                      ),
+                      duration: Duration(seconds: 4),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+
+                  final provider = context.read<EventProvider>();
+                  final ok = await provider.deleteEvent(event.id);
+                  if (!mounted) return;
+                  messenger.hideCurrentSnackBar();
+
+                  if (ok) {
+                    messenger.showSnackBar(
+                      SnackBar(
+                        content: Text('"$eventName" deleted successfully.'),
+                        backgroundColor: AppColors.charcoal,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  } else {
+                    final errorMsg = provider.errorMessage;
+                    messenger.showSnackBar(
+                      SnackBar(
+                        content: Text(errorMsg != null && errorMsg.isNotEmpty
+                            ? errorMsg
+                            : 'Failed to delete event.'),
+                        backgroundColor: AppColors.error,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
                 }
               },
             ),
@@ -551,51 +598,63 @@ class _EventListScreenState extends State<EventListScreen> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 5),
-                    Row(
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 6,
+                      runSpacing: 2,
                       children: [
-                        const Icon(
-                          Icons.calendar_today_rounded,
-                          size: 12,
-                          color: AppColors.textSecondary,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          formattedDate,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        if (event.location != null && event.location!.isNotEmpty) ...[
-                          const SizedBox(width: 6),
-                          const Text(
-                            '•',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppColors.textTertiary,
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.calendar_today_rounded,
+                              size: 12,
+                              color: AppColors.textSecondary,
                             ),
-                          ),
-                          const SizedBox(width: 6),
-                          const Icon(
-                            Icons.location_on_outlined,
-                            size: 13,
-                            color: AppColors.textSecondary,
-                          ),
-                          const SizedBox(width: 2),
-                          Expanded(
-                            child: Text(
-                              event.location!,
+                            const SizedBox(width: 4),
+                            Text(
+                              formattedDate,
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: AppColors.textSecondary,
                                 fontWeight: FontWeight.w500,
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
                             ),
+                          ],
+                        ),
+                        if (event.location != null && event.location!.isNotEmpty)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text(
+                                '•',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textTertiary,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              const Icon(
+                                Icons.location_on_outlined,
+                                size: 12,
+                                color: AppColors.textSecondary,
+                              ),
+                              const SizedBox(width: 2),
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 120),
+                                child: Text(
+                                  event.location!,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textSecondary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
                       ],
                     ),
                   ],

@@ -20,3 +20,11 @@ export function acceptedMatch(scores: number[]): boolean {
   return scores.some((score) => score >= MATCH_STRONG_THRESHOLD)
     || scores.filter((score) => score >= MATCH_CONSENSUS_THRESHOLD).length >= 2;
 }
+
+export function validateScanEmbeddings(embeddings: number[][]): boolean {
+  if (embeddings.length < 1 || embeddings.some((embedding) =>
+    embedding.length !== 512 || !embedding.every(Number.isFinite))) return false;
+  const first = embeddings[0];
+  return embeddings.slice(1).every((embedding) =>
+    cosineSimilarity(first, embedding) >= SCAN_CONSISTENCY_THRESHOLD);
+}

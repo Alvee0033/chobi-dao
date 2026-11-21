@@ -2,7 +2,6 @@ import { Module } from "@nestjs/common";
 import { BullModule } from "@nestjs/bullmq";
 import { workerEnv } from "./config/env";
 import { FaceIndexProcessor } from "./processors/face-index.processor";
-import { ZipProcessor } from "./processors/zip.processor";
 
 const env = workerEnv();
 
@@ -10,8 +9,7 @@ const env = workerEnv();
   imports: [
     BullModule.forRoot({ connection: { url: env.REDIS_URL } }),
     BullModule.registerQueue({ name: "face-index" }),
-    BullModule.registerQueue({ name: "zip-generation" }),
   ],
-  providers: [FaceIndexProcessor, ZipProcessor]
+  providers: [FaceIndexProcessor]
 })
 export class AppModule {}

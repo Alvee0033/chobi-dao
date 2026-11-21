@@ -62,7 +62,7 @@ export class EventsController {
     if (!event?.coverPhotoKey) return res.code(404).send({ message: "Cover not found" });
     const stream = await this.storage.getFileStream(event.coverPhotoKey);
     res.header("Cache-Control", "public, max-age=3600");
-    res.header("Content-Type", "image/jpeg");
+    res.header("Content-Type", event.coverPhotoMimeType ?? "image/jpeg");
     return res.send(stream as any);
   }
 

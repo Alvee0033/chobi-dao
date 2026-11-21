@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, memo } from "react";
-import { type SearchPhoto } from "@/lib/api";
+import { useState, useEffect, useCallback, useRef, memo } from "react";
+import { type SearchPhoto, getGuestSessionPhotos } from "@/lib/api";
 import { Icons } from "../icons";
 import type { ShowToast } from "../types";
 import { ClayButton } from "../ui/ClayButton";
@@ -103,13 +103,18 @@ const PhotoCard = memo(function PhotoCard({
 export function GuestGalleryPage({ 
   showToast, 
   slug, 
-  photos, 
+  photos: initialPhotos,
+  totalCount,
+  nextOffset: initialOffset,
+  sessionToken,
   indexingCount = 0,
   onStartOver 
 }: { 
   showToast: ShowToast; 
   slug: string; 
-  photos: SearchPhoto[]; 
+  photos: SearchPhoto[];
+  totalCount: number;
+  nextOffset: number;
   indexingCount?: number;
   sessionToken: string; 
   onStartOver: () => void 
@@ -117,21 +122,47 @@ export function GuestGalleryPage({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [visibleCount, setVisibleCount] = useState(16);
+  const [photos, setPhotos] = useState(initialPhotos);
+  const [nextOffset, setNextOffset] = useState(initialOffset);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const loadingMoreRef = useRef(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  const loadMorePhotos = useCallback(async () => {
+    if (loadingMoreRef.current || nextOffset >= totalCount || sessionToken === "public-person-share") return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    try {
+      const result = await getGuestSessionPhotos(slug, sessionToken, nextOffset);
+      setPhotos((current) => {
+        const seen = new Set(current.map((photo) => photo.id));
+        return [...current, ...result.photos.filter((photo) => !seen.has(photo.id))];
+      });
+      setNextOffset(result.nextOffset);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Could not load more photos.");
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  }, [loadingMore, nextOffset, totalCount, sessionToken, slug, showToast]);
 
 
   // Reset visible count if photos array changes
   useEffect(() => {
     setVisibleCount(16);
-  }, [photos]);
+    setPhotos(initialPhotos);
+    setNextOffset(initialOffset);
+  }, [initialPhotos, initialOffset]);
 
   useEffect(() => {
-    if (visibleCount >= photos.length) return;
+    if (visibleCount >= photos.length && (nextOffset >= totalCount || loadingMore)) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
-          setVisibleCount((prev) => Math.min(prev + 16, photos.length));
+          if (visibleCount < photos.length) setVisibleCount((prev) => Math.min(prev + 16, photos.length));
+          else void loadMorePhotos();
         }
       },
       { threshold: 0.1, rootMargin: "300px" }
@@ -147,7 +178,7 @@ export function GuestGalleryPage({
         observer.unobserve(target);
       }
     };
-  }, [visibleCount, photos.length]);
+  }, [visibleCount, photos.length, nextOffset, totalCount, loadingMore, loadMorePhotos]);
 
   const downloadSinglePhoto = useCallback(async (photoUrl: string, filename: string) => {
     showToast("Downloading photo...");
@@ -188,13 +219,25 @@ export function GuestGalleryPage({
 
   const handleDownloadAll = async () => {
     if (photos.length === 0) return;
-    showToast(`Downloading all ${photos.length} photos...`);
-    for (let i = 0; i < photos.length; i++) {
-      const photo = photos[i];
-      await downloadSinglePhoto(photo.fullUrl, `${slug}-photo-${i + 1}.jpg`);
-      await new Promise((resolve) => setTimeout(resolve, 350));
+    try {
+      let allPhotos = [...photos];
+      let offset = nextOffset;
+      while (offset < totalCount) {
+        const page = await getGuestSessionPhotos(slug, sessionToken, offset);
+        allPhotos = [...allPhotos, ...page.photos.filter((photo) => !allPhotos.some((loaded) => loaded.id === photo.id))];
+        offset = page.nextOffset;
+        if (!page.photos.length && page.hasMore) break;
+      }
+      showToast(`Downloading all ${allPhotos.length} photos...`);
+      for (let i = 0; i < allPhotos.length; i++) {
+        const photo = allPhotos[i];
+        await downloadSinglePhoto(photo.fullUrl, `${slug}-photo-${i + 1}.jpg`);
+        await new Promise((resolve) => setTimeout(resolve, 350));
+      }
+      showToast("All downloads initiated successfully!");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Could not prepare all downloads.");
     }
-    showToast("All downloads initiated successfully!");
   };
 
   return (
@@ -235,7 +278,7 @@ export function GuestGalleryPage({
             </div>
             <h1 className="text-3xl sm:text-4xl font-black font-heading text-charcoal tracking-tight">Your Event Gallery</h1>
             <p className="text-sm sm:text-base text-muted font-bold mt-1">
-              Found <span className="text-orange-600 font-black">{photos.length}</span> photos of you in this event.
+              Found <span className="text-orange-600 font-black">{totalCount}</span> photos of you in this event.
             </p>
           </div>
 
@@ -264,7 +307,7 @@ export function GuestGalleryPage({
                       className="h-11 px-4 bg-white hover:bg-orange-50 text-charcoal border border-orange-200/80 rounded-2xl text-xs font-black transition-all flex items-center gap-2 shadow-sm active:scale-95"
                     >
                       {selectedIds.size === photos.length ? <Icons.CheckSquare size={14} className="text-orange-600" /> : <Icons.Square size={14} />}
-                      {selectedIds.size === photos.length ? "Deselect All" : "Select All"}
+                      {selectedIds.size === photos.length ? "Deselect loaded" : "Select loaded"}
                     </button>
 
                     <button
@@ -282,7 +325,7 @@ export function GuestGalleryPage({
                     className="h-11 px-6 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-2xl text-xs font-black transition-all flex items-center gap-2 shadow-lg shadow-orange-500/20 active:scale-95"
                   >
                     <Icons.Download size={15} />
-                    Download All ({photos.length})
+                    Download All ({totalCount})
                   </button>
                 )}
               </>
@@ -322,9 +365,9 @@ export function GuestGalleryPage({
                 />
               ))}
             </div>
-            {visibleCount < photos.length && (
+            {(visibleCount < photos.length || nextOffset < totalCount) && (
               <div id="load-more-trigger" className="h-20 w-full flex items-center justify-center py-6">
-                <Icons.Loader size={28} className="text-orange-500" />
+                {loadingMore ? <Icons.Loader size={28} className="text-orange-500" /> : <Icons.Loader size={28} className="text-orange-500" />}
               </div>
             )}
           </div>

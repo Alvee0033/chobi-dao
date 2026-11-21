@@ -1,16 +1,16 @@
 import { Processor, WorkerHost } from "@nestjs/bullmq";
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { workerEnv } from "../config/env";
 import { randomUUID } from "crypto";
 import fs from "fs";
 import path from "path";
+import sharp from "sharp";
+import { choosePersonMatch } from "./person-match";
 
 // Cosine similarity threshold for same-person matching.
 // InsightFace 512-dim ArcFace embeddings: 0.56+ indicates same person across different angles/lighting.
 const MATCH_THRESHOLD = 0.56;
-// Merge pass threshold: if two persons share avg embedding similarity above this, merge them.
-const MERGE_THRESHOLD = 0.58;
 
 @Processor("face-index", { concurrency: 4 })
 export class FaceIndexProcessor extends WorkerHost {
@@ -64,12 +64,13 @@ export class FaceIndexProcessor extends WorkerHost {
    * Queries top 5 candidate embeddings and picks the best scoring person.
    */
   private async findMatchingPerson(
+    db: Prisma.TransactionClient,
     eventId: string,
     photoId: string,
     vectorStr: string,
   ): Promise<string | null> {
     try {
-      const candidates = await this.prisma.$queryRawUnsafe<
+      const candidates = await db.$queryRawUnsafe<
         Array<{ person_id: string; similarity: number }>
       >(
         `SELECT f.person_id, (1 - (fe.embedding <=> $3::vector)) AS similarity
@@ -87,100 +88,9 @@ export class FaceIndexProcessor extends WorkerHost {
         MATCH_THRESHOLD,
       );
 
-      if (candidates.length === 0) return null;
-
-      // Group by person_id and pick the person with the best average similarity
-      const personScores = new Map<string, { total: number; count: number }>();
-      for (const row of candidates) {
-        if (!row.person_id) continue;
-        const existing = personScores.get(row.person_id) ?? { total: 0, count: 0 };
-        personScores.set(row.person_id, {
-          total: existing.total + row.similarity,
-          count: existing.count + 1,
-        });
-      }
-
-      let bestPersonId: string | null = null;
-      let bestAvg = 0;
-      for (const [personId, scores] of personScores) {
-        const avg = scores.total / scores.count;
-        if (avg > bestAvg) {
-          bestAvg = avg;
-          bestPersonId = personId;
-        }
-      }
-
-      return bestPersonId;
+      return choosePersonMatch(candidates, MATCH_THRESHOLD);
     } catch (clusterErr) {
-      console.error("Worker clustering query error:", clusterErr);
-      return null;
-    }
-  }
-
-  /**
-   * Post-process merge pass: finds pairs of Persons in this event whose face
-   * embeddings have high mutual similarity and merges the smaller into the larger.
-   * This fixes cases where parallel uploads create duplicate Person records for
-   * the same real person.
-   */
-  private async mergeduplicatePersons(eventId: string): Promise<void> {
-    try {
-      // Find Person pairs with high avg embedding similarity between their faces
-      const mergeCandidates = await this.prisma.$queryRawUnsafe<
-        Array<{ person_a: string; person_b: string; avg_sim: number }>
-      >(
-        `SELECT
-           fa.person_id AS person_a,
-           fb.person_id AS person_b,
-           AVG(1 - (ea.embedding <=> eb.embedding)) AS avg_sim
-         FROM "face_embeddings" ea
-         JOIN "faces" fa ON fa.id = ea.id::text
-         JOIN "face_embeddings" eb ON eb.event_id = ea.event_id
-         JOIN "faces" fb ON fb.id = eb.id::text
-         WHERE ea.event_id = $1::uuid
-           AND fa.person_id != fb.person_id
-           AND fa.person_id IS NOT NULL
-           AND fb.person_id IS NOT NULL
-           AND ea.photo_id != eb.photo_id
-         GROUP BY fa.person_id, fb.person_id
-         HAVING AVG(1 - (ea.embedding <=> eb.embedding)) >= $2
-           AND fa.person_id < fb.person_id
-         LIMIT 20`,
-        eventId,
-        MERGE_THRESHOLD,
-      );
-
-      for (const pair of mergeCandidates) {
-        // Check both persons still exist
-        const [personA, personB] = await Promise.all([
-          this.prisma.person.findUnique({
-            where: { id: pair.person_a },
-            include: { faces: { select: { id: true } } },
-          }),
-          this.prisma.person.findUnique({
-            where: { id: pair.person_b },
-            include: { faces: { select: { id: true } } },
-          }),
-        ]);
-
-        if (!personA || !personB) continue;
-
-        // Keep the person with more faces; merge the smaller into the larger
-        const keepId = personA.faces.length >= personB.faces.length ? pair.person_a : pair.person_b;
-        const removeId = keepId === pair.person_a ? pair.person_b : pair.person_a;
-
-        console.log(`Worker merge: merging Person ${removeId} into ${keepId} (sim=${pair.avg_sim.toFixed(3)})`);
-
-        await this.prisma.face.updateMany({
-          where: { personId: removeId },
-          data: { personId: keepId },
-        });
-
-        await this.prisma.person.delete({ where: { id: removeId } }).catch(() => undefined);
-      }
-    } catch (mergeErr) {
-      // Non-fatal: merge pass best-effort
-      console.warn("Worker merge pass error:", mergeErr);
+      throw clusterErr;
     }
   }
 
@@ -200,16 +110,22 @@ export class FaceIndexProcessor extends WorkerHost {
       await this.prisma.face.deleteMany({ where: { photoId } });
       await this.prisma.$executeRawUnsafe('DELETE FROM "face_embeddings" WHERE "photo_id" = $1::uuid', photoId);
       const bytes = await this.getPhotoBytes(storageKey);
+      const inferenceImage = await sharp(bytes, { limitInputPixels: 40_000_000 })
+        .rotate()
+        .resize({ width: 2400, height: 2400, fit: "inside", withoutEnlargement: true })
+        .jpeg({ quality: 88 })
+        .toBuffer();
       let faceCount = 0;
 
       // Call local InsightFace AI Service
       const aiServiceUrl = this.env.AI_SERVICE_URL || "http://ai-service:8000";
       const formData = new FormData();
-      formData.append("file", new Blob([new Uint8Array(bytes)]), "photo.jpg");
+      formData.append("file", new Blob([new Uint8Array(inferenceImage)]), "photo.jpg");
 
       const aiRes = await fetch(`${aiServiceUrl}/analyze`, {
         method: "POST",
         body: formData,
+        signal: AbortSignal.timeout(120_000),
       });
 
       if (!aiRes.ok) throw new Error(`Face analysis returned ${aiRes.status}`);
@@ -224,8 +140,6 @@ export class FaceIndexProcessor extends WorkerHost {
 
         const detectedFaces = aiData.faces || [];
         faceCount = detectedFaces.length;
-        let currentPersonCount = await this.prisma.person.count({ where: { eventId } });
-
         for (const face of detectedFaces) {
           if (!Array.isArray(face.embedding) || face.embedding.length !== 512 || !face.embedding.every(Number.isFinite)) {
             throw new Error("Face analysis returned an invalid embedding");
@@ -233,64 +147,34 @@ export class FaceIndexProcessor extends WorkerHost {
           const faceId = randomUUID();
           const vectorStr = `[${face.embedding.join(",")}]`;
 
-          // Store in face_embeddings via pgvector
-          await this.prisma.$executeRawUnsafe(
+          await this.prisma.$transaction(async (tx) => {
+            // Inference remains parallel; only cluster writes serialize for this event.
+            await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${eventId}))`;
+            await tx.$executeRawUnsafe(
               `INSERT INTO "face_embeddings" ("id", "photo_id", "event_id", "embedding", "bbox", "det_score", "created_at")
                VALUES ($1::uuid, $2::uuid, $3::uuid, $4::vector, $5::jsonb, $6, NOW())
                ON CONFLICT ("id") DO NOTHING`,
-              faceId,
-              photoId,
-              eventId,
-              vectorStr,
-              JSON.stringify(face.bbox),
-              face.det_score ?? 0.95,
+              faceId, photoId, eventId, vectorStr, JSON.stringify(face.bbox), face.det_score ?? 0.95,
             );
-
-          // Match or create person — using improved threshold & top-5 candidate scoring
-          const matchedPersonId = await this.findMatchingPerson(eventId, photoId, vectorStr);
-
-          let finalPersonId: string;
-          if (!matchedPersonId) {
-            currentPersonCount += 1;
-            const person = await this.prisma.person.create({
-              data: { eventId, name: `Person ${currentPersonCount}` },
+            const matchedPersonId = await this.findMatchingPerson(tx, eventId, photoId, vectorStr);
+            const person = matchedPersonId
+              ? null
+              : await tx.person.create({ data: { eventId, name: `Person ${(await tx.person.count({ where: { eventId } })) + 1}` } });
+            const finalPersonId = matchedPersonId ?? person!.id;
+            await tx.face.upsert({
+              where: { id: faceId },
+              update: {
+                photoId, personId: finalPersonId,
+                boundingBox: { Left: face.bbox[0], Top: face.bbox[1], Width: face.bbox[2] - face.bbox[0], Height: face.bbox[3] - face.bbox[1] },
+              },
+              create: {
+                id: faceId, photoId, personId: finalPersonId,
+                boundingBox: { Left: face.bbox[0], Top: face.bbox[1], Width: face.bbox[2] - face.bbox[0], Height: face.bbox[3] - face.bbox[1] },
+              },
             });
-            finalPersonId = person.id;
-          } else {
-            finalPersonId = matchedPersonId;
-          }
-
-          await this.prisma.face.upsert({
-            where: { id: faceId },
-            update: {
-              photoId,
-              personId: finalPersonId,
-              boundingBox: {
-                Left: face.bbox[0],
-                Top: face.bbox[1],
-                Width: face.bbox[2] - face.bbox[0],
-                Height: face.bbox[3] - face.bbox[1],
-              },
-            },
-            create: {
-              id: faceId,
-              photoId,
-              personId: finalPersonId,
-              boundingBox: {
-                Left: face.bbox[0],
-                Top: face.bbox[1],
-                Width: face.bbox[2] - face.bbox[0],
-                Height: face.bbox[3] - face.bbox[1],
-              },
-            },
           });
         }
 
-        // Run merge pass after processing all faces in this photo
-        // to consolidate any duplicate Person records created by parallel indexing
-        if (faceCount > 0) {
-          await this.mergeduplicatePersons(eventId);
-        }
       }
 
       await this.prisma.photo.update({

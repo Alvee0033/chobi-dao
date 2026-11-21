@@ -6,7 +6,7 @@ services:
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-chobi}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chobipassword123}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD to a unique production secret}
       POSTGRES_DB: ${POSTGRES_DB:-chobi_db}
     expose:
       - "5432"
@@ -36,8 +36,8 @@ services:
     restart: always
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-chobiadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-chobiadminsecret123}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER to a unique storage username}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD to a unique production secret}
     expose:
       - "9000"
       - "9001"
@@ -56,9 +56,9 @@ services:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c "
-      /usr/bin/mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-chobiadmin} ${MINIO_ROOT_PASSWORD:-chobiadminsecret123};
+      /usr/bin/mc alias set local http://minio:9000 ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD};
       /usr/bin/mc mb --ignore-existing local/${S3_BUCKET:-chobi-photos};
-      /usr/bin/mc anonymous set download local/${S3_BUCKET:-chobi-photos};
+      /usr/bin/mc anonymous set none local/${S3_BUCKET:-chobi-photos};
       exit 0;
       "
 
@@ -86,23 +86,27 @@ services:
     environment:
       PORT: 3001
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER:-chobi}:${POSTGRES_PASSWORD:-chobipassword123}@postgres:5432/${POSTGRES_DB:-chobi_db}?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_USER:-chobi}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-chobi_db}?schema=public
       REDIS_URL: redis://redis:6379
-      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-chobi_super_jwt_secret_key_2026_xyz}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-chobi_super_refresh_secret_key_2026_xyz}
-      LIVENESS_TOKEN_SECRET: ${LIVENESS_TOKEN_SECRET:-chobi_liveness_secret_key_2026}
-      SEARCH_SESSION_SECRET: ${SEARCH_SESSION_SECRET:-chobi_search_secret_key_2026}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?Set a unique JWT_ACCESS_SECRET (32+ characters)}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?Set a unique JWT_REFRESH_SECRET (32+ characters)}
+      LIVENESS_TOKEN_SECRET: ${LIVENESS_TOKEN_SECRET:?Set a unique LIVENESS_TOKEN_SECRET (32+ characters)}
+      SEARCH_SESSION_SECRET: ${SEARCH_SESSION_SECRET:?Set a unique SEARCH_SESSION_SECRET (32+ characters)}
+      TRUST_PROXY: ${TRUST_PROXY:?Set TRUST_PROXY to the Coolify proxy IP/CIDR}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       AUTH_EMAIL_FROM: ${AUTH_EMAIL_FROM:-}
-      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
-      API_BASE_URL: ${API_BASE_URL:-http://localhost:3001}
+      UDDOKTAPAY_BASE_URL: ${UDDOKTAPAY_BASE_URL:-https://sandbox.uddoktapay.com/api}
+      UDDOKTAPAY_API_KEY: ${UDDOKTAPAY_API_KEY:-}
+      APP_BASE_URL: ${APP_BASE_URL:?Set APP_BASE_URL to the public web application URL}
+      API_BASE_URL: ${API_BASE_URL:?Set API_BASE_URL to the public API URL}
       AI_SERVICE_URL: http://ai-service:8000
       STORAGE_DRIVER: minio
       S3_ENDPOINT: http://minio:9000
       S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
       S3_REGION: us-east-1
-      S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-chobiadmin}
-      S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-chobiadminsecret123}
+      S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER}
+      S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD}
       S3_BUCKET: ${S3_BUCKET:-chobi-photos}
       S3_FORCE_PATH_STYLE: "true"
       LOCAL_STORAGE_DIR: /storage/uploads
@@ -126,13 +130,13 @@ services:
     environment:
       PORT: 3002
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER:-chobi}:${POSTGRES_PASSWORD:-chobipassword123}@postgres:5432/${POSTGRES_DB:-chobi_db}?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_USER:-chobi}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-chobi_db}?schema=public
       REDIS_URL: redis://redis:6379
       AI_SERVICE_URL: http://ai-service:8000
       S3_ENDPOINT: http://minio:9000
       S3_REGION: us-east-1
-      S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-chobiadmin}
-      S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-chobiadminsecret123}
+      S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER}
+      S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD}
       S3_BUCKET: ${S3_BUCKET:-chobi-photos}
       LOCAL_STORAGE_DIR: /storage/uploads
     volumes:

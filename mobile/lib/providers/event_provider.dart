@@ -160,14 +160,20 @@ class EventProvider extends ChangeNotifier {
 
   Future<bool> deleteEvent(String eventId) async {
     try {
-      await _apiClient.delete('/v1/events/$eventId');
-      _events.removeWhere((e) => e.id == eventId);
-      if (_selectedEvent?.id == eventId) {
-        _selectedEvent = null;
+      final response = await _apiClient.delete('/v1/events/$eventId');
+      final status = response.statusCode ?? 200;
+      if (status >= 200 && status < 300) {
+        _events.removeWhere((e) => e.id == eventId);
+        if (_selectedEvent?.id == eventId) {
+          _selectedEvent = null;
+        }
+        _updateStatsFromEvents();
+        notifyListeners();
+        return true;
       }
-      _updateStatsFromEvents();
+      _errorMessage = 'Server error ($status): failed to delete event';
       notifyListeners();
-      return true;
+      return false;
     } catch (e) {
       _errorMessage = ApiClient.extractErrorMessage(e);
       notifyListeners();

@@ -8,6 +8,9 @@ export const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().default("dev-refresh-secret"),
   LIVENESS_TOKEN_SECRET: z.string().default("dev-liveness-secret"),
   SEARCH_SESSION_SECRET: z.string().default("dev-search-secret"),
+  // Only trust forwarded client IP headers from explicitly configured proxy IPs/CIDRs.
+  TRUST_PROXY: z.string().default(""),
+  CORS_ORIGINS: z.string().default(""),
   // Google OAuth + Drive
   GOOGLE_CLIENT_ID: z.string().default(""),
   GOOGLE_CLIENT_SECRET: z.string().default(""),
@@ -22,8 +25,8 @@ export const envSchema = z.object({
   BKASH_CALLBACK_URL: z.preprocess((value) => value === "" ? undefined : value, z.string().url().optional()),
   UDDOKTAPAY_BASE_URL: z.string().url().default("https://sandbox.uddoktapay.com/api"),
   UDDOKTAPAY_API_KEY: z.string().default(""),
-  APP_BASE_URL: z.string().default("http://localhost:3000"),
-  API_BASE_URL: z.string().default("http://localhost:3001"),
+  APP_BASE_URL: z.string().url().default("http://localhost:3000"),
+  API_BASE_URL: z.string().url().default("http://localhost:3001"),
   RESEND_API_KEY: z.string().default(""),
   AUTH_EMAIL_FROM: z.string().default(""),
   // AI Service (InsightFace self-hosted)
@@ -48,6 +51,19 @@ export const envSchema = z.object({
     .string()
     .optional()
     .transform((v) => (v ?? "true").toLowerCase() !== "false"),
+}).superRefine((env, ctx) => {
+  if (env.NODE_ENV !== "production") return;
+  for (const key of ["JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET", "LIVENESS_TOKEN_SECRET", "SEARCH_SESSION_SECRET"] as const) {
+    if (env[key].length < 32 || env[key].startsWith("dev-") || env[key].includes("chobi_super_")) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [key], message: "Must be a unique secret of at least 32 characters in production" });
+    }
+  }
+  if (env.STORAGE_DRIVER !== "local" && (env.S3_ACCESS_KEY_ID.length < 8 || env.S3_ACCESS_KEY_ID === "minio" || env.S3_SECRET_ACCESS_KEY.length < 24 || env.S3_SECRET_ACCESS_KEY === "minio123")) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["S3_SECRET_ACCESS_KEY"], message: "Production object storage credentials must be explicitly configured; use an 8+ character username and 24+ character password" });
+  }
+  if (!env.TRUST_PROXY.trim()) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["TRUST_PROXY"], message: "Set the trusted Coolify proxy IP/CIDR so client IP based throttles cannot be spoofed or collapsed to one proxy address" });
+  }
 });
 export type AppEnv = z.infer<typeof envSchema>;
 export const parseEnv = (): AppEnv => envSchema.parse(process.env);

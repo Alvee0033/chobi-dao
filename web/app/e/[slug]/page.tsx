@@ -27,8 +27,9 @@ async function getEvent(slug: string): Promise<{ slug: string; name: string; sea
   }
 }
 
-export default async function EventLandingPage({ params }: { params: { slug: string } }) {
-  const event = await getEvent(params.slug);
+export default async function EventLandingPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const event = await getEvent(slug);
 
   if (!event) {
     return (
@@ -49,7 +50,7 @@ export default async function EventLandingPage({ params }: { params: { slug: str
             </div>
             
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-red-500 mb-2">Event Not Found</p>
-            <h1 className="text-2xl font-black font-heading text-charcoal mb-3 tracking-tight">"{params.slug}"</h1>
+            <h1 className="text-2xl font-black font-heading text-charcoal mb-3 tracking-tight">"{slug}"</h1>
             <p className="text-sm text-muted font-bold mb-8 px-2 leading-relaxed">
               We couldn't find an active event matching this slug. Please verify the URL or ask your photographer for the link.
             </p>

@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException, OnModuleInit } from "@nestjs/common";
 import {
   S3Client,
   PutObjectCommand,
@@ -73,12 +73,8 @@ export class ObjectStorageService implements OnModuleInit {
         this.bucketChecked = true;
         this.logger.log(`Created storage bucket '${this.env.S3_BUCKET}' in MinIO/S3.`);
       } catch (createErr) {
-        this.logger.warn(`Could not verify/create S3 bucket '${this.env.S3_BUCKET}': ${createErr}. Falling back to local storage.`);
-        const uploadDir = path.resolve(this.env.LOCAL_STORAGE_DIR);
-        if (!fs.existsSync(uploadDir)) {
-          fs.mkdirSync(uploadDir, { recursive: true });
-        }
-        this.bucketChecked = true;
+        this.logger.error(`Could not verify/create S3 bucket '${this.env.S3_BUCKET}': ${createErr}`);
+        throw createErr;
       }
     }
   }
@@ -99,17 +95,11 @@ export class ObjectStorageService implements OnModuleInit {
     const thumbKey = `events/${eventSlug}/photos/${photoId}_thumb.webp`;
 
     // 1. Generate optimized thumbnail via sharp
-    let thumbBuffer: Buffer;
-    try {
-      thumbBuffer = await sharp(buffer)
+    const thumbBuffer = await sharp(buffer)
         .rotate()
         .resize({ width: 640, height: 640, fit: "inside", withoutEnlargement: true })
         .webp({ quality: 80 })
         .toBuffer();
-    } catch (sharpErr) {
-      this.logger.warn(`Thumbnail generation failed for ${photoId}: ${sharpErr}. Using original.`);
-      thumbBuffer = buffer;
-    }
 
     // 2. Upload both files
     await this.putBuffer(origKey, buffer, mimeType || "image/jpeg");
@@ -146,11 +136,8 @@ export class ObjectStorageService implements OnModuleInit {
         }),
       );
     } catch (err) {
-      this.logger.warn(`S3 upload failed for ${key}, saving locally: ${err}`);
-      const fullPath = path.join(path.resolve(this.env.LOCAL_STORAGE_DIR), key);
-      const dir = path.dirname(fullPath);
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      await fs.promises.writeFile(fullPath, buffer);
+      this.logger.error(`S3 upload failed for ${key}: ${err}`);
+      throw err;
     }
   }
 
@@ -188,11 +175,7 @@ export class ObjectStorageService implements OnModuleInit {
       }
     }
 
-    const dummyWebp = Buffer.from(
-      "UklGRigAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA",
-      "base64",
-    );
-    return Readable.from(dummyWebp);
+    throw new NotFoundException("Media object not found");
   }
 
   async getFileBuffer(keyOrUrl: string): Promise<Buffer> {

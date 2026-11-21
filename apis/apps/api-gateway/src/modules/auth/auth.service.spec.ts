@@ -21,6 +21,15 @@ describe("AuthService email verification", () => {
         update: jest.fn(),
       },
       refreshToken: { create: jest.fn().mockResolvedValue({}), deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      event: { findUnique: jest.fn() },
+      $transaction: jest.fn(async (run: any) => run({
+        $queryRaw: jest.fn(),
+        livenessChallenge: {
+          deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+          count: jest.fn().mockResolvedValue(0),
+          create: jest.fn().mockResolvedValue({}),
+        },
+      })),
     };
     service = new AuthService(prisma, mockDrive, mockEmail as any);
   });
@@ -83,6 +92,26 @@ describe("AuthService email verification", () => {
       where: { id: "photographer-1", emailVerified: false, emailVerificationAttempts: { lt: 5 } },
       data: { emailVerificationAttempts: { increment: 1 } },
     }));
+  });
+
+  it("issues a short-lived single-use scan challenge and persists it", async () => {
+    prisma.event.findUnique.mockResolvedValue({ id: "event-1", status: "active", deletedAt: null });
+    const result = await service.createLivenessToken("wedding", "127.0.0.1");
+    expect(result.livenessToken).toEqual(expect.any(String));
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("rate-limits scan challenge issuance per event and IP", async () => {
+    prisma.event.findUnique.mockResolvedValue({ id: "event-1", status: "active", deletedAt: null });
+    prisma.$transaction.mockImplementationOnce(async (run: any) => run({
+      $queryRaw: jest.fn(),
+      livenessChallenge: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+        count: jest.fn().mockResolvedValue(30),
+        create: jest.fn(),
+      },
+    }));
+    await expect(service.createLivenessToken("wedding", "127.0.0.1")).rejects.toThrow("Too many scan attempts");
   });
 
   it("persists only supported notification preferences", async () => {

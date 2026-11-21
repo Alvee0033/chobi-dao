@@ -141,5 +141,7 @@ export class AuthController {
   }
 
   @Post("liveness-token")
-  liveness(@Body() dto: LivenessTokenRequestDto) { return this.authService.createLivenessToken(dto.eventSlug, dto.challengeType); }
+  liveness(@Req() req: { ip?: string }, @Body() dto: LivenessTokenRequestDto) {
+    return this.authService.createLivenessToken(dto.eventSlug, req.ip ?? "unknown");
+  }
 }

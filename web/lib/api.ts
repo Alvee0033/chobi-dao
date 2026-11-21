@@ -338,13 +338,21 @@ export async function issueLivenessToken(slug: string): Promise<{ livenessToken:
   });
 }
 
-export async function searchPhotos(slug: string, livenessToken: string, images: string[]): Promise<{ count: number; photos: SearchPhoto[]; sessionToken: string; indexingCount: number }> {
-  return json<{ count: number; photos: SearchPhoto[]; sessionToken: string; indexingCount: number }>(`/v1/search/${encodeURIComponent(slug)}`, {
+export type GuestSearchResponse = { count: number; photos: SearchPhoto[]; sessionToken: string; indexingCount: number; nextOffset: number; hasMore: boolean };
+
+export async function searchPhotos(slug: string, livenessToken: string, images: string[]): Promise<GuestSearchResponse> {
+  return json<GuestSearchResponse>(`/v1/search/${encodeURIComponent(slug)}`, {
     method: "POST",
     headers: {
       "X-Liveness-Token": livenessToken
     },
     body: JSON.stringify({ images })
+  });
+}
+
+export async function getGuestSessionPhotos(slug: string, sessionToken: string, offset: number): Promise<Omit<GuestSearchResponse, "sessionToken" | "indexingCount">> {
+  return json<Omit<GuestSearchResponse, "sessionToken" | "indexingCount">>(`/v1/search/${encodeURIComponent(slug)}/photos?offset=${offset}`, {
+    headers: { "X-Search-Session": sessionToken },
   });
 }
 
