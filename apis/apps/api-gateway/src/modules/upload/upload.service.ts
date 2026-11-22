@@ -49,7 +49,7 @@ export class UploadService {
     await queue.add(
       "face-index",
       { photoId, eventId, driveFileId: storageKey, mimeType },
-      { jobId: photoId, attempts: 3, backoff: { type: "exponential", delay: 5000 }, removeOnComplete: true, removeOnFail: 1000 },
+      { jobId: photoId, attempts: 5, backoff: { type: "exponential", delay: 10000 }, removeOnComplete: true, removeOnFail: 1000 },
     );
   }
 
@@ -125,6 +125,57 @@ export class UploadService {
         ...(authHeader ? { Authorization: authHeader } : {}),
       },
     };
+  }
+
+  async createUploadUrls(photographerId: string, eventId: string, files: UploadUrlRequestDto[], apiBase: string, authHeader?: string) {
+    if (!files.length || files.length > 40) throw new BadRequestException("Reserve between 1 and 40 photos at a time");
+    if (files.some((file) => !Number.isSafeInteger(file.fileSizeBytes) || file.fileSizeBytes < 1 || file.fileSizeBytes > MAX_UPLOAD_BYTES || !ALLOWED_IMAGE_TYPES.has(file.contentType))) {
+      throw new BadRequestException("Each photo must be a supported image up to 100 MB");
+    }
+    const event = await this.prisma.event.findUnique({ where: { id: eventId } });
+    if (!event || event.photographerId !== photographerId || event.deletedAt) throw new NotFoundException("Event not found");
+    const photographer = await this.prisma.photographer.findUnique({ where: { id: photographerId }, select: { trialEndsAt: true } });
+    if (!photographer) throw new NotFoundException("Photographer not found");
+    const paidSubscription = await this.prisma.subscription.findFirst({ where: { photographerId, status: "succeeded", currentPeriodEnd: { gt: new Date() } }, select: { id: true } });
+    const pro = Boolean(paidSubscription) || photographer.trialEndsAt > new Date();
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 15 * 60 * 1000);
+    const reservations = files.map((file) => ({ id: randomUUID(), file }));
+    const acceptedIndexes = new Set<number>();
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM photographers WHERE id = ${photographerId}::uuid FOR UPDATE`;
+        const stale = await tx.photo.findMany({ where: { event: { photographerId }, indexStatus: "pending", OR: [{ uploadExpiresAt: { lte: now } }, { uploadExpiresAt: null, uploadedAt: { lte: new Date(now.getTime() - 24 * 60 * 60 * 1000) } }] }, select: { id: true, eventId: true } });
+        if (stale.length) {
+          await tx.photo.deleteMany({ where: { id: { in: stale.map((photo) => photo.id) } } });
+          const byEvent = new Map<string, number>();
+          for (const photo of stale) byEvent.set(photo.eventId, (byEvent.get(photo.eventId) ?? 0) + 1);
+          await Promise.all([...byEvent].map(([staleEventId, count]) => tx.event.update({ where: { id: staleEventId }, data: { totalPhotos: { decrement: count } } })));
+        }
+        const [usage, photoCount] = await Promise.all([
+          tx.photo.aggregate({ where: { event: { photographerId } }, _sum: { fileSizeBytes: true } }),
+          tx.photo.count({ where: { event: { photographerId } } }),
+        ]);
+        const storageLimit = pro ? 20 * FREE_STORAGE_BYTES : FREE_STORAGE_BYTES;
+        let reservedBytes = Number(usage._sum.fileSizeBytes || 0n);
+        let reservedCount = photoCount;
+        files.forEach((file, index) => {
+          if ((!pro && reservedCount >= 200) || reservedBytes + file.fileSizeBytes > storageLimit) return;
+          acceptedIndexes.add(index);
+          reservedCount += 1;
+          reservedBytes += file.fileSizeBytes;
+        });
+        const accepted = reservations.filter((_, index) => acceptedIndexes.has(index));
+        if (accepted.length) {
+          await tx.photo.createMany({ data: accepted.map(({ id, file }) => ({ id, eventId, fileName: file.fileName, fileSizeBytes: BigInt(file.fileSizeBytes), fileHash: file.fileHash, mimeType: file.contentType, indexStatus: "pending" as const, uploadExpiresAt: expiresAt })) });
+          await tx.event.update({ where: { id: eventId }, data: { totalPhotos: { increment: accepted.length } } });
+        }
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw new ConflictException("A duplicate photo is already uploaded for this event");
+      throw error;
+    }
+    return reservations.map(({ id, file }, index) => acceptedIndexes.has(index) ? ({ photoId: id, uploadUrl: `${apiBase}/v1/events/${encodeURIComponent(eventId)}/photos/${encodeURIComponent(id)}/upload-direct`, key: "", expiresAt: expiresAt.toISOString(), requiredHeaders: { "Content-Type": file.contentType, ...(authHeader ? { Authorization: authHeader } : {}) } }) : null);
   }
 
   async uploadDirect(photographerId: string, eventId: string, photoId: string, body: Buffer, contentType: string) {
@@ -324,50 +375,6 @@ export class UploadService {
     };
   }
 
-  private async consolidatePeople(eventId: string): Promise<void> {
-    try {
-      const pairs = await this.prisma.$queryRawUnsafe<
-        Array<{ person_a: string; person_b: string }>
-      >(
-        `SELECT
-           fa.person_id AS person_a,
-           fb.person_id AS person_b
-         FROM "face_embeddings" ea
-         JOIN "faces" fa ON fa.id = ea.id::text
-         JOIN "face_embeddings" eb ON eb.event_id = ea.event_id
-         JOIN "faces" fb ON fb.id = eb.id::text
-         WHERE ea.event_id = $1::uuid
-           AND fa.person_id != fb.person_id
-           AND fa.person_id IS NOT NULL
-           AND fb.person_id IS NOT NULL
-           AND ea.photo_id != eb.photo_id
-         GROUP BY fa.person_id, fb.person_id
-         HAVING AVG(1 - (ea.embedding <=> eb.embedding)) >= 0.56
-           AND fa.person_id < fb.person_id
-         LIMIT 25`,
-        eventId,
-      );
-
-      for (const pair of pairs) {
-        const [pA, pB] = await Promise.all([
-          this.prisma.person.findUnique({ where: { id: pair.person_a }, include: { faces: true } }),
-          this.prisma.person.findUnique({ where: { id: pair.person_b }, include: { faces: true } }),
-        ]);
-        if (!pA || !pB) continue;
-        const targetId = pA.faces.length >= pB.faces.length ? pair.person_a : pair.person_b;
-        const sourceId = targetId === pair.person_a ? pair.person_b : pair.person_a;
-        await this.prisma.face.updateMany({ where: { personId: sourceId }, data: { personId: targetId } });
-        await this.prisma.person.delete({ where: { id: sourceId } }).catch(() => undefined);
-      }
-
-      await this.prisma.person.deleteMany({
-        where: { eventId, faces: { none: {} } }
-      }).catch(() => undefined);
-    } catch {
-      // Best-effort consolidation
-    }
-  }
-
   async people(photographerId: string, eventId: string, apiBase?: string): Promise<EventPersonSummary[]> {
     if (!this.env.ENABLE_PEOPLE_STORIES) return [];
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
@@ -376,50 +383,28 @@ export class UploadService {
     const cached = this.peopleCache.get(eventId);
     if (cached && cached.expiresAt > Date.now()) return cached.value;
 
-    await this.consolidatePeople(eventId);
+    const people = await this.prisma.$queryRaw<Array<{ person_id: string; name: string | null; face_count: number; photo_count: number; cover_photo_id: string; updated_at: Date }>>`
+      SELECT p.id::text AS person_id, p.name, COUNT(f.id)::int AS face_count,
+        COUNT(DISTINCT f.photo_id)::int AS photo_count,
+        (ARRAY_AGG(ph.id ORDER BY ph.uploaded_at DESC))[1]::text AS cover_photo_id,
+        MAX(ph.uploaded_at) AS updated_at
+      FROM people p
+      JOIN faces f ON f.person_id = p.id
+      JOIN photos ph ON ph.id = f.photo_id AND ph.deleted_at IS NULL
+      WHERE p.event_id = ${eventId}::uuid
+      GROUP BY p.id, p.name
+      ORDER BY COUNT(DISTINCT f.photo_id) DESC`;
+    const summaries = people.map((person, index) => ({
+      personId: person.person_id,
+      label: person.name && !person.name.startsWith("Person ") ? person.name : `Person ${index + 1}`,
+      faceCount: person.face_count,
+      photoCount: person.photo_count,
+      coverPhotoId: person.cover_photo_id,
+      coverThumbUrl: apiBase ? this.buildMediaUrl(apiBase, person.cover_photo_id, "thumb") : "",
+      updatedAt: person.updated_at.toISOString(),
+    }));
 
-    const people = await this.prisma.person.findMany({
-      where: { eventId },
-      include: {
-        faces: {
-          include: {
-            photo: true,
-          },
-        },
-      },
-      orderBy: { createdAt: "asc" },
-    });
-
-    const summaries = people
-      .map((person) => {
-        const uniquePhotoIds = [...new Set(person.faces.map((f) => f.photoId))];
-        const coverPhoto = person.faces
-          .map((f) => f.photo)
-          .sort((a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime())[0];
-        if (!coverPhoto) return null;
-        const coverThumbUrl = apiBase
-          ? this.buildMediaUrl(apiBase, coverPhoto.id, "thumb")
-          : (coverPhoto.driveThumbnailLink || coverPhoto.driveWebViewLink || "");
-        return {
-          personId: person.id,
-          label: person.name || `Person`,
-          faceCount: person.faces.length,
-          photoCount: uniquePhotoIds.length,
-          coverPhotoId: coverPhoto.id,
-          coverThumbUrl,
-          updatedAt: coverPhoto.uploadedAt.toISOString(),
-        };
-      })
-      .filter((item): item is EventPersonSummary => Boolean(item))
-      .sort((a, b) => b.photoCount - a.photoCount)
-      .map((item, index) => {
-        const cleanLabel = item.label && !item.label.startsWith("Person ")
-          ? item.label
-          : `Person ${index + 1}`;
-        return { ...item, label: cleanLabel };
-      });
-
-    this.peopleCache.set(eventId, { value: summaries, expiresAt: Date.now() + 10_000 });
+    this.peopleCache.set(eventId, { value: summaries, expiresAt: Date.now() + 5_000 });
     return summaries;
   }
 

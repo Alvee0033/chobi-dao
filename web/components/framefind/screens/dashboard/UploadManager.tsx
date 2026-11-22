@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { createUploadUrl, finalizeUpload, refreshToken as renewToken } from "@/lib/api";
+import { createUploadUrls, finalizeUpload, refreshToken as renewToken } from "@/lib/api";
 import { useAuth } from "@/components/framefind/AuthProvider";
 import type { UploadItem, UploadSummary } from "./model";
 
@@ -9,6 +9,7 @@ const LIMIT = 100 * 1024 * 1024;
 const MAX_PARALLEL = 2;
 const CHUNK = 40;
 const VISIBLE_LIMIT = 32;
+type UploadReservation = { photoId: string; uploadUrl: string; key: string; expiresAt: string; requiredHeaders?: Record<string, string> };
 type SafeUpload = Omit<UploadItem, "file" | "previewObjectUrl" | "abort">;
 type Manager = { queue: SafeUpload[]; queueLength: number; getQueueWindow: (offset: number, limit: number) => SafeUpload[]; summaries: Record<string, UploadSummary>; uploadingEventId: string | null; enqueue: (eventId: string, files: File[]) => void; cancel: (id: string) => void; retry: (id: string) => void };
 const Context = createContext<Manager | null>(null);
@@ -24,6 +25,7 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
   const files = useRef(new Map<string, File>());
   const records = useRef(new Map<string, UploadItem>());
   const controllers = useRef(new Map<string, AbortController>());
+  const reservations = useRef(new Map<string, Promise<UploadReservation>>());
   const running = useRef(0);
   const starting = useRef(false);
   const [queue, setQueue] = useState<SafeUpload[]>([]);
@@ -80,16 +82,18 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
         if (!file) { records.current.delete(next.id); continue; }
         const controller = new AbortController();
         controllers.current.set(next.id, controller);
-        records.current.set(next.id, { ...next, status: "uploading", progress: 0 });
+        records.current.set(next.id, { ...next, status: next.progress >= 100 && next.photoId ? "processing" : "uploading" });
         running.current += 1;
         setUploadingEventId(next.eventId);
         publish();
         void (async () => {
           let complete = false;
           try {
-            const presign = await withToken((token) => createUploadUrl(token, next.eventId, file.name, file.type || "image/jpeg", file.size));
+            const presignPromise = reservations.current.get(next.id);
+            if (!presignPromise) throw new Error("Upload reservation expired. Retry this photo.");
+            const presign = await presignPromise;
             records.current.set(next.id, { ...records.current.get(next.id)!, photoId: presign.photoId });
-            await new Promise<void>((resolve, reject) => {
+            if (!(next.progress >= 100 && next.photoId)) await new Promise<void>((resolve, reject) => {
               const xhr = new XMLHttpRequest();
               xhr.open("PUT", presign.uploadUrl);
               Object.entries(presign.requiredHeaders || {}).forEach(([key, value]) => xhr.setRequestHeader(key, value));
@@ -111,6 +115,7 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
             records.current.set(next.id, { ...records.current.get(next.id)!, status: "processing", progress: 100 });
             publish();
             await withToken((token) => finalizeUpload(token, next.eventId, [presign.photoId]));
+            reservations.current.delete(next.id);
             complete = true;
             window.dispatchEvent(new Event("chobi-upload-complete"));
             const done = records.current.get(next.id);
@@ -144,38 +149,70 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
     window.dispatchEvent(new CustomEvent("chobi-toast", { detail: `${supported.length} photos added${rejected ? ` · ${rejected} skipped` : ""}` }));
     let index = 0;
     const append = () => {
-      const start = index;
       const end = Math.min(index + CHUNK, supported.length);
+      const batch: Array<{ id: string; file: File }> = [];
       for (; index < end; index += 1) {
         const file = supported[index];
         const id = crypto.randomUUID();
         files.current.set(id, file);
         records.current.set(id, { id, eventId, fileName: file.name, progress: 0, status: "queued" });
+        batch.push({ id, file });
       }
-      setSummaries((prior) => ({ ...prior, [eventId]: { ...prior[eventId], preparing: Math.max(0, (prior[eventId]?.preparing ?? 0) - (end - start)) } }));
+      const reservationBatch = withToken((token) => createUploadUrls(token, eventId, batch.map(({ file }) => ({ fileName: file.name, contentType: file.type || "image/jpeg", fileSizeBytes: file.size }))));
+      batch.forEach(({ id }, position) => reservations.current.set(id, reservationBatch.then((result) => {
+        const reservation = result[position];
+        if (!reservation) throw new Error("Storage or free-plan upload limit reached. Upgrade your plan or free up storage.");
+        return reservation;
+      })));
+      void reservationBatch.then(() => {
+        setSummaries((prior) => ({ ...prior, [eventId]: { ...prior[eventId], preparing: Math.max(0, (prior[eventId]?.preparing ?? 0) - batch.length) } }));
+        publish();
+        void work();
+      }).catch((error) => {
+        for (const { id } of batch) {
+          const item = records.current.get(id);
+          if (item) records.current.set(id, { ...item, status: "failed", error: error instanceof Error ? error.message : "Could not reserve upload." });
+          reservations.current.delete(id);
+        }
+        setSummaries((prior) => ({ ...prior, [eventId]: { ...prior[eventId], preparing: Math.max(0, (prior[eventId]?.preparing ?? 0) - batch.length), failed: (prior[eventId]?.failed ?? 0) + batch.length } }));
+        publish();
+      });
       publish();
-      void work();
       if (index < supported.length) window.setTimeout(append, 0);
     };
     window.setTimeout(append, 0);
-  }, [publish, work]);
+  }, [publish, work, withToken]);
 
   const cancel = useCallback((id: string) => {
     const item = records.current.get(id);
     controllers.current.get(id)?.abort();
     records.current.delete(id);
     files.current.delete(id);
+    reservations.current.delete(id);
     publish();
     if (item) setSummaries((prior) => ({ ...prior, [item.eventId]: { ...prior[item.eventId], total: Math.max(0, (prior[item.eventId]?.total ?? 0) - 1), failed: item.status === "failed" ? Math.max(0, (prior[item.eventId]?.failed ?? 0) - 1) : prior[item.eventId]?.failed ?? 0 } }));
   }, [publish]);
   const retry = useCallback((id: string) => {
     const item = records.current.get(id);
     if (!item || item.status !== "failed") return;
+    if (!item.photoId) {
+      const file = files.current.get(id);
+      if (!file) return;
+      reservations.current.set(id, withToken((token) => createUploadUrls(token, item.eventId, [{ fileName: file.name, contentType: file.type || "image/jpeg", fileSizeBytes: file.size }])).then((result) => {
+        if (!result[0]) throw new Error("Could not reserve this photo.");
+        return result[0];
+      }));
+      void reservations.current.get(id)?.catch((error) => {
+        const current = records.current.get(id);
+        if (current) records.current.set(id, { ...current, error: error instanceof Error ? error.message : "Could not reserve this photo." });
+        publish();
+      });
+    }
     records.current.set(id, { ...item, status: "queued", progress: 0, error: undefined });
     setSummaries((prior) => ({ ...prior, [item.eventId]: { ...prior[item.eventId], failed: Math.max(0, (prior[item.eventId]?.failed ?? 0) - 1) } }));
     publish();
     void work();
-  }, [publish, work]);
+  }, [publish, work, withToken]);
 
   useEffect(() => () => { controllers.current.forEach((controller) => controller.abort()); }, []);
   const value = useMemo(() => ({ queue, queueLength, getQueueWindow, summaries, uploadingEventId, enqueue, cancel, retry }), [queue, queueLength, getQueueWindow, summaries, uploadingEventId, enqueue, cancel, retry]);

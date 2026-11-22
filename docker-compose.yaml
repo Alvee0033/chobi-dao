@@ -71,12 +71,18 @@ services:
       INSIGHTFACE_MODEL: ${INSIGHTFACE_MODEL:-buffalo_s}
       ORT_INTRA_THREADS: 2
       ORT_INTER_THREADS: 1
-      DET_SIZE: ${DET_SIZE:-640}
+      DET_SIZE: ${DET_SIZE:-480}
       MAX_IMAGE_DIM: ${MAX_IMAGE_DIM:-2400}
     volumes:
       - insightface_models:/root/.insightface
     expose:
       - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
 
   api-gateway:
     build:
@@ -119,6 +125,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      ai-service:
+        condition: service_healthy
       minio:
         condition: service_healthy
 
@@ -145,6 +153,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      ai-service:
         condition: service_healthy
 
   web:

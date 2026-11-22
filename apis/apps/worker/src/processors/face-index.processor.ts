@@ -7,6 +7,7 @@ import fs from "fs";
 import path from "path";
 import sharp from "sharp";
 import { choosePersonMatch } from "./person-match";
+import { lockEventForFaceIndex } from "./event-index-lock";
 
 // Cosine similarity threshold for same-person matching.
 // InsightFace 512-dim ArcFace embeddings: 0.56+ indicates same person across different angles/lighting.
@@ -149,7 +150,7 @@ export class FaceIndexProcessor extends WorkerHost {
 
           await this.prisma.$transaction(async (tx) => {
             // Inference remains parallel; only cluster writes serialize for this event.
-            await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${eventId}))`;
+            await lockEventForFaceIndex(tx, eventId);
             await tx.$executeRawUnsafe(
               `INSERT INTO "face_embeddings" ("id", "photo_id", "event_id", "embedding", "bbox", "det_score", "created_at")
                VALUES ($1::uuid, $2::uuid, $3::uuid, $4::vector, $5::jsonb, $6, NOW())

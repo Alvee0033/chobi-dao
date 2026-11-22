@@ -20,6 +20,16 @@ export class UploadController {
     const apiBase = `${proto}://${host}`;
     return this.upload.createUploadUrl(req.user.id, id, dto, apiBase, req.headers.authorization);
   }
+  @Post("upload-urls")
+  createBatch(
+    @Req() req: { user: { id: string }; headers: { authorization?: string; host?: string; "x-forwarded-proto"?: string } },
+    @Param("id") id: string,
+    @Body() dto: { files?: UploadUrlRequestDto[] },
+  ) {
+    const proto = req.headers["x-forwarded-proto"] ?? "http";
+    const host = req.headers.host ?? "localhost:3001";
+    return this.upload.createUploadUrls(req.user.id, id, dto.files ?? [], `${proto}://${host}`, req.headers.authorization);
+  }
   @Put("photos/:photoId/upload-direct")
   async uploadDirect(
     @Req() req: {

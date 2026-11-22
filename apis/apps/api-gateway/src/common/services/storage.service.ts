@@ -102,8 +102,10 @@ export class ObjectStorageService implements OnModuleInit {
         .toBuffer();
 
     // 2. Upload both files
-    await this.putBuffer(origKey, buffer, mimeType || "image/jpeg");
-    await this.putBuffer(thumbKey, thumbBuffer, "image/webp");
+    await Promise.all([
+      this.putBuffer(origKey, buffer, mimeType || "image/jpeg"),
+      this.putBuffer(thumbKey, thumbBuffer, "image/webp"),
+    ]);
 
     return {
       id: photoId,

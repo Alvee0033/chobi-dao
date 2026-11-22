@@ -54,4 +54,16 @@ describe("guest photo removal", () => {
     prisma.guestSession.findUnique.mockResolvedValue({ ...session, expiresAt: new Date(Date.now() - 1000) });
     await expect(service.requestPhotoRemoval("event", "session-token", photoId)).rejects.toBeInstanceOf(UnauthorizedException);
   });
+
+  it("processes a selected batch only when every photo belongs to the active guest session", async () => {
+    const secondPhotoId = "00000000-0000-4000-8000-000000000011";
+    const { service, prisma } = fixture({ id: photoId, indexStatus: "indexed", faceCount: 1 });
+    prisma.guestSession.findUnique.mockResolvedValue({ ...session, matchedPhotoIds: [photoId, secondPhotoId] });
+    jest.spyOn(service, "requestPhotoRemoval").mockImplementation(async (_slug, _token, id) => ({ status: id === photoId ? "removed" : "review_requested" }));
+    await expect(service.requestPhotoRemovals("event", "session-token", [photoId, secondPhotoId, photoId])).resolves.toEqual({
+      results: [{ photoId, status: "removed" }, { photoId: secondPhotoId, status: "review_requested" }],
+    });
+    prisma.guestSession.findUnique.mockResolvedValue(session);
+    await expect(service.requestPhotoRemovals("event", "session-token", [photoId, secondPhotoId])).rejects.toBeInstanceOf(UnauthorizedException);
+  });
 });

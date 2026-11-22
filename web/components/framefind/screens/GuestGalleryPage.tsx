@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, memo } from "react";
-import { type SearchPhoto, getGuestSessionPhotos, requestGuestPhotoRemoval } from "@/lib/api";
+import { type SearchPhoto, getGuestSessionPhotos, requestGuestPhotoRemoval, requestGuestPhotoRemovals } from "@/lib/api";
 import { Icons } from "../icons";
 import type { ShowToast } from "../types";
 import { ClayCard } from "../ui/ClayCard";
@@ -107,6 +107,7 @@ export function GuestGalleryPage({
   const [requestedIds, setRequestedIds] = useState<Set<string>>(() => new Set());
   const [layout, setLayout] = useState<"grid" | "list">("grid");
   const [confirmPhotoId, setConfirmPhotoId] = useState<string | null>(null);
+  const [confirmSelection, setConfirmSelection] = useState(false);
   const [removingPhotoId, setRemovingPhotoId] = useState<string | null>(null);
   const [nextOffset, setNextOffset] = useState(initialOffset);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -218,6 +219,29 @@ export function GuestGalleryPage({
     }
   };
 
+  const handleRemoveSelected = async () => {
+    const targets = photos.filter((photo) => selectedIds.has(photo.id));
+    if (!targets.length || removingPhotoId) return;
+    setRemovingPhotoId("bulk");
+    try {
+      const { results } = await requestGuestPhotoRemovals(slug, sessionToken, targets.map((photo) => photo.id));
+      const removed = new Set(results.filter((result) => result.status === "removed").map((result) => result.photoId));
+      const requested = new Set(results.filter((result) => result.status === "review_requested").map((result) => result.photoId));
+      if (removed.size) {
+        setPhotos((current) => current.filter((photo) => !removed.has(photo.id)));
+        setCurrentTotal((count) => Math.max(0, count - removed.size));
+        setNextOffset((offset) => Math.max(0, offset - [...removed].filter((id) => photos.findIndex((photo) => photo.id === id) < offset).length));
+      }
+      if (requested.size) setRequestedIds((current) => new Set([...current, ...requested]));
+      setSelectedIds(new Set());
+      setIsSelectMode(false);
+      setConfirmSelection(false);
+      showToast(`${removed.size} personal photo${removed.size === 1 ? "" : "s"} removed${requested.size ? ` · ${requested.size} group photo request${requested.size === 1 ? "" : "s"} sent` : ""}.`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Could not process selected photos.");
+    } finally { setRemovingPhotoId(null); }
+  };
+
   const handleDownloadSelected = async () => {
     const targets = photos.filter(p => selectedIds.has(p.id));
     if (targets.length === 0) return;
@@ -322,14 +346,8 @@ export function GuestGalleryPage({
                       {selectedIds.size === photos.length ? "Deselect loaded" : "Select loaded"}
                     </button>
 
-                    <button
-                      onClick={handleDownloadSelected}
-                      disabled={selectedIds.size === 0}
-                      className="guest-gallery-download"
-                    >
-                      <Icons.Download size={14} />
-                      Download ({selectedIds.size})
-                    </button>
+                    <button onClick={handleDownloadSelected} disabled={selectedIds.size === 0} className="guest-gallery-download"><Icons.Download size={14} />Download ({selectedIds.size})</button>
+                    {sessionToken !== "public-person-share" && <button onClick={() => setConfirmSelection(true)} disabled={selectedIds.size === 0 || !!removingPhotoId} className="guest-gallery-remove-selected"><Icons.Trash size={14} />Remove selected ({selectedIds.size})</button>}
                   </>
                 ) : (
                   <button
@@ -402,6 +420,7 @@ export function GuestGalleryPage({
         />
       )}
       {confirmPhotoId && <div className="guest-gallery-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !removingPhotoId) setConfirmPhotoId(null); }}><section className="guest-gallery-dialog" role="alertdialog" aria-modal="true" aria-labelledby="guest-photo-removal-title" aria-describedby="guest-photo-removal-copy"><div className="guest-gallery-dialog-icon"><Icons.Trash size={20} /></div><h2 id="guest-photo-removal-title">{photos.find((photo) => photo.id === confirmPhotoId)?.canRemoveOriginal ? "Remove this photo?" : "Request group photo removal?"}</h2><p id="guest-photo-removal-copy">{photos.find((photo) => photo.id === confirmPhotoId)?.canRemoveOriginal ? "This solo photo will disappear from the event and everyone’s gallery. The photographer can restore it for 30 days." : "This group photo includes other people. It stays in the event while the photographer reviews your request."}</p><div className="guest-gallery-dialog-actions"><button type="button" disabled={!!removingPhotoId} onClick={() => setConfirmPhotoId(null)}>Keep photo</button><button type="button" disabled={!!removingPhotoId} onClick={() => void removeGuestPhoto(confirmPhotoId)}>{removingPhotoId ? "Please wait…" : photos.find((photo) => photo.id === confirmPhotoId)?.canRemoveOriginal ? "Remove photo" : "Send request"}</button></div></section></div>}
+      {confirmSelection && <div className="guest-gallery-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !removingPhotoId) setConfirmSelection(false); }}><section className="guest-gallery-dialog" role="alertdialog" aria-modal="true" aria-labelledby="guest-selection-removal-title" aria-describedby="guest-selection-removal-copy"><div className="guest-gallery-dialog-icon"><Icons.Trash size={20} /></div><h2 id="guest-selection-removal-title">Remove selected photos?</h2><p id="guest-selection-removal-copy">{photos.filter((photo) => selectedIds.has(photo.id) && photo.canRemoveOriginal).length} solo photos will be removed from the event. {photos.filter((photo) => selectedIds.has(photo.id) && !photo.canRemoveOriginal).length} group photos will stay visible and be sent to the photographer for review.</p><div className="guest-gallery-dialog-actions"><button type="button" disabled={!!removingPhotoId} onClick={() => setConfirmSelection(false)}>Keep photos</button><button type="button" disabled={!!removingPhotoId} onClick={() => void handleRemoveSelected()}>{removingPhotoId ? "Please wait…" : "Remove personal photos"}</button></div></section></div>}
     </main>
   );
 }

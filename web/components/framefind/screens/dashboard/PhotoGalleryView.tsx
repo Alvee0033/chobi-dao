@@ -1,6 +1,6 @@
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState, memo } from "react";
-import { getEventPeople, getEventPhotos, deletePhoto, getPhotoRemovalRequests, reviewPhotoRemovalRequest, getDeletedEventPhotos, restoreEventPhoto, type EventPhoto, type EventPerson, type PhotoRemovalRequest, type DeletedEventPhoto } from "@/lib/api";
+import { getEventPeople, getEventPhotos, getEventIndexStatus, deletePhoto, getPhotoRemovalRequests, reviewPhotoRemovalRequest, getDeletedEventPhotos, restoreEventPhoto, type EventPhoto, type EventPerson, type PhotoRemovalRequest, type DeletedEventPhoto } from "@/lib/api";
 import { Icons } from "../../icons";
 import type { ShowToast } from "../../types";
 import { ClayButton } from "../../ui/ClayButton";
@@ -166,6 +166,7 @@ export function PhotoGalleryView({
   const [loadingMore, setLoadingMore] = useState(false);
   const [removalRequests, setRemovalRequests] = useState<PhotoRemovalRequest[]>([]);
   const [deletedPhotos, setDeletedPhotos] = useState<DeletedEventPhoto[]>([]);
+  const [indexingProgress, setIndexingProgress] = useState<{ total: number; indexed: number; failed: number; inProgress: number } | null>(null);
 
   // Reset visible count if selected person or eventId changes
   useEffect(() => {
@@ -300,6 +301,26 @@ export function PhotoGalleryView({
     loadRemovalRequests();
   }, [eventId, selectedPersonId]);
 
+  useEffect(() => {
+    let timer: number | undefined;
+    let lastRefresh = 0;
+    const refreshAfterUpload = () => {
+      const now = Date.now();
+      const delay = Math.max(0, 1500 - (now - lastRefresh));
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        lastRefresh = Date.now();
+        void loadPhotos(true);
+        void loadPeople(true);
+      }, delay);
+    };
+    window.addEventListener("chobi-upload-complete", refreshAfterUpload);
+    return () => {
+      window.removeEventListener("chobi-upload-complete", refreshAfterUpload);
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [eventId, selectedPersonId]);
+
   const eventUploads = useMemo(() => {
     const existingPhotoIds = new Set(photos.map((p) => p.id));
     return uploadQueue.filter(
@@ -311,20 +332,6 @@ export function PhotoGalleryView({
   }, [uploadQueue, eventId, photos]);
 
   useEffect(() => {
-    const hasInFlight = eventUploads.some((u) => u.status === "uploading" || u.status === "processing" || u.status === "queued");
-    if (!hasInFlight) {
-      void loadPhotos(true);
-      void loadPeople(true);
-      return;
-    }
-    const id = window.setInterval(() => {
-      loadPhotos(true);
-      loadPeople(true);
-    }, 6000);
-    return () => window.clearInterval(id);
-  }, [eventUploads, eventId, selectedPersonId]);
-
-  useEffect(() => {
     if (!selectedPersonId) return;
     const exists = people.some((p) => p.personId === selectedPersonId);
     if (!exists) setSelectedPersonId(null);
@@ -334,6 +341,31 @@ export function PhotoGalleryView({
     () => photos.some((photo) => photo.status === "processing" || photo.status === "uploaded" || photo.status === "pending_upload"),
     [photos],
   );
+
+  useEffect(() => {
+    let active = true;
+    let settled = false;
+    const refreshStatus = async () => {
+      try {
+        const status = await withRefresh((token) => getEventIndexStatus(token, eventId));
+        if (!active) return;
+        setIndexingProgress(status);
+        if (status.inProgress > 0) settled = false;
+        else if (!settled) {
+          settled = true;
+          void loadPhotos(true);
+          void loadPeople(true);
+        }
+      } catch { /* keep the last status while a transient request fails */ }
+    };
+    const hasLocalWork = eventUploads.some((item) => ["uploading", "processing", "queued"].includes(item.status));
+    if (!hasLocalWork && !hasServerSideIndexingInFlight) {
+      return () => { active = false; };
+    }
+    void refreshStatus();
+    const interval = window.setInterval(() => { void refreshStatus(); }, 2500);
+    return () => { active = false; window.clearInterval(interval); };
+  }, [eventId, eventUploads, hasServerSideIndexingInFlight]);
 
   const handleDeletePhoto = async (photoId: string) => {
     try {
@@ -363,6 +395,7 @@ export function PhotoGalleryView({
           <div>
             <h1 className="text-2xl font-black text-charcoal">Photo Gallery</h1>
             <p className="text-muted text-xs font-medium uppercase tracking-widest">Event Assets &bull; {photos.length} Total</p>
+            {indexingProgress && indexingProgress.inProgress > 0 && <p className="mt-1 text-xs font-semibold text-orange-700" role="status">Matching faces · {indexingProgress.indexed} of {indexingProgress.total} indexed</p>}
           </div>
         </div>
 
@@ -421,6 +454,7 @@ export function PhotoGalleryView({
             <div className="h-full rounded-full bg-orange-500 transition-[width] duration-300" style={{ width: `${Math.round((uploadSummary.uploaded / uploadSummary.total) * 100)}%` }} />
           </div>
           <p className="mt-2 text-xs text-muted">You can keep using the dashboard while photos upload. Face matching continues after each upload.</p>
+          {indexingProgress && indexingProgress.inProgress > 0 && <p className="mt-1 text-xs font-semibold text-orange-700">Face matching is processing {indexingProgress.inProgress} photo{indexingProgress.inProgress === 1 ? "" : "s"}.</p>}
         </div>
       )}
 

@@ -116,20 +116,11 @@ def _iou(a, b):
 
 
 def detect_faces(image: Image.Image):
-    """Detect once on the full image, then on overlapping crops for small group faces."""
+    """Run one fast full-frame pass and refine small-face images with four overlapping crops."""
     width, height = image.size
-    regions = [(0, 0, width, height)]
-    if max(width, height) >= 1200:
-        tile = min(1200, max(800, round(min(width, height) * 0.65)))
-        stride = round(tile * 0.8)
-        xs = list(range(0, max(1, width - tile + 1), stride))
-        ys = list(range(0, max(1, height - tile + 1), stride))
-        xs.append(max(0, width - tile))
-        ys.append(max(0, height - tile))
-        regions += [(x, y, min(width, x + tile), min(height, y + tile)) for y in sorted(set(ys)) for x in sorted(set(xs))][:12]
-
     found = []
-    for left, top, right, bottom in regions:
+    def scan(region):
+        left, top, right, bottom = region
         crop = image.crop((left, top, right, bottom))
         for face in face_app.get(np.array(crop)[:, :, ::-1]):
             embedding = getattr(face, "embedding", None)
@@ -143,4 +134,17 @@ def detect_faces(image: Image.Image):
                 found.append(candidate)
             elif score > found[match_index]["det_score"]:
                 found[match_index] = candidate
+    scan((0, 0, width, height))
+
+    # Portraits with a confidently detected large face need no crop passes.
+    # Group and distant-face images get a 2x2 refinement pass to recover small faces.
+    face_area = max((max(0, face["bbox"][2] - face["bbox"][0]) * max(0, face["bbox"][3] - face["bbox"][1]) for face in found), default=0)
+    if max(width, height) >= 1200 and (not found or face_area / max(1, width * height) < 0.08):
+        tile_width = min(width, max(800, round(width * 0.68)))
+        tile_height = min(height, max(800, round(height * 0.68)))
+        x_positions = sorted({0, max(0, width - tile_width)})
+        y_positions = sorted({0, max(0, height - tile_height)})
+        for top in y_positions:
+            for left in x_positions:
+                scan((left, top, left + tile_width, top + tile_height))
     return found

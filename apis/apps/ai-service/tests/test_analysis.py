@@ -8,7 +8,11 @@ from app import main
 
 
 class TileDetector:
+    def __init__(self):
+        self.calls = 0
+
     def get(self, image):
+        self.calls += 1
         # Simulate a small face that the full-frame detector misses.
         if image.shape[1] > 1200 or image.shape[0] > 1200:
             return []
@@ -34,6 +38,29 @@ class FaceDetectionTests(unittest.TestCase):
             self.assertEqual(len(faces), 1)
             self.assertEqual(faces[0]["bbox"], [790.0, 790.0, 830.0, 830.0])
             self.assertAlmostEqual(np.linalg.norm(faces[0]["embedding"]), 1.0)
+            self.assertEqual(main.face_app.calls, 5)
+        finally:
+            main.face_app = original
+
+    def test_large_clear_portrait_uses_only_the_full_frame_pass(self):
+        class PortraitDetector:
+            calls = 0
+
+            def get(self, _image):
+                self.calls += 1
+                return [SimpleNamespace(
+                    bbox=np.array([350, 180, 1250, 1450]),
+                    embedding=np.ones(512, dtype=np.float32),
+                    det_score=0.99,
+                )]
+
+        original = main.face_app
+        detector = PortraitDetector()
+        main.face_app = detector
+        try:
+            faces = main.detect_faces(Image.new("RGB", (1600, 1600), "black"))
+            self.assertEqual(len(faces), 1)
+            self.assertEqual(detector.calls, 1)
         finally:
             main.face_app = original
 

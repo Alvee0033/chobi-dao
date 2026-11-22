@@ -34,6 +34,11 @@ export class SearchController {
     return this.search.requestPhotoRemoval(slug, sessionToken, photoId);
   }
 
+  @Post(":slug/photos/removal-requests/batch")
+  requestPhotoRemovalBatch(@Param("slug") slug: string, @Headers("x-search-session") sessionToken: string, @Body() body: { photoIds?: string[] }) {
+    return this.search.requestPhotoRemovals(slug, sessionToken, body?.photoIds ?? []);
+  }
+
   @Get(":slug/zip/:jobId")
   zipStatus(@Param("slug") slug: string, @Param("jobId") jobId: string) {
     return this.search.zipStatus(slug, jobId);

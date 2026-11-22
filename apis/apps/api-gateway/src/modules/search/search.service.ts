@@ -268,6 +268,19 @@ export class SearchService {
     return { status: request.status === "pending" ? "review_requested" : request.status };
   }
 
+  async requestPhotoRemovals(slug: string, sessionToken: string, photoIds: string[]) {
+    const uniqueIds = [...new Set(photoIds.filter((id) => typeof id === "string" && id.length > 0))];
+    if (!uniqueIds.length || uniqueIds.length > 48) throw new BadRequestException("Select between 1 and 48 photos");
+    const event = await this.prisma.event.findUnique({ where: { slug }, select: { id: true } });
+    if (!event) throw new NotFoundException("Event not found");
+    const session = await this.prisma.guestSession.findUnique({ where: { sessionToken } });
+    if (!session || session.eventId !== event.id || session.expiresAt <= new Date() || uniqueIds.some((id) => !session.matchedPhotoIds.includes(id))) {
+      throw new UnauthorizedException("One or more photos are not part of your active gallery session");
+    }
+    const results = await Promise.all(uniqueIds.map(async (photoId) => ({ photoId, ...await this.requestPhotoRemoval(slug, sessionToken, photoId) })));
+    return { results };
+  }
+
   async zipStatus(slug: string, jobId: string) {
     void slug;
     void jobId;

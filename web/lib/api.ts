@@ -136,8 +136,9 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
     ? (init.headers as any).Authorization 
     : "";
   const cacheKey = `${path}:${authHeader}`;
+  const bypassCache = init?.cache === "no-store";
 
-  if (isGet) {
+  if (isGet && !bypassCache) {
     const cached = requestCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
       return cached.data as T;
@@ -163,7 +164,7 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(message);
   }
 
-  if (isGet) {
+  if (isGet && !bypassCache) {
     // Cache GET results for 5 seconds to absorb rapid navigation clicks
     requestCache.set(cacheKey, {
       data: payload,
@@ -287,6 +288,9 @@ export async function createUploadUrl(token: string, eventId: string, fileName: 
     body: JSON.stringify({ fileName, contentType, fileSizeBytes, fileHash })
   });
 }
+export async function createUploadUrls(token: string, eventId: string, files: Array<{ fileName: string; contentType: string; fileSizeBytes: number }>): Promise<Array<{ photoId: string; uploadUrl: string; key: string; expiresAt: string; requiredHeaders?: Record<string, string> } | null>> {
+  return json(`/v1/events/${encodeURIComponent(eventId)}/upload-urls`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify({ files }) });
+}
 
 export async function createEventCoverUploadUrl(token: string, eventId: string, fileName: string, contentType: string): Promise<{ uploadUrl: string; key: string; expiresAt: string; requiredHeaders?: Record<string, string> }> {
   return json<{ uploadUrl: string; key: string; expiresAt: string; requiredHeaders?: Record<string, string> }>(`/v1/events/${encodeURIComponent(eventId)}/cover-upload-url`, {
@@ -360,6 +364,9 @@ export async function getGuestSessionPhotos(slug: string, sessionToken: string, 
 export async function requestGuestPhotoRemoval(slug: string, sessionToken: string, photoId: string) {
   return json<{ status: "removed" | "review_requested" | "approved" | "rejected"; recoverableUntil?: string }>(`/v1/search/${encodeURIComponent(slug)}/photos/${encodeURIComponent(photoId)}/removal-request`, { method: "POST", headers: { "x-search-session": sessionToken } });
 }
+export async function requestGuestPhotoRemovals(slug: string, sessionToken: string, photoIds: string[]) {
+  return json<{ results: Array<{ photoId: string; status: "removed" | "review_requested" | "approved" | "rejected"; recoverableUntil?: string }> }>(`/v1/search/${encodeURIComponent(slug)}/photos/removal-requests/batch`, { method: "POST", headers: { "x-search-session": sessionToken }, body: JSON.stringify({ photoIds }) });
+}
 
 export async function createZip(slug: string, sessionToken: string): Promise<{ jobId: string }> {
   return json<{ jobId: string }>(`/v1/search/${encodeURIComponent(slug)}/zip`, {
@@ -407,6 +414,7 @@ export async function getEventQr(token: string, eventId: string): Promise<{ url:
 
 export async function getEventIndexStatus(token: string, eventId: string): Promise<EventIndexStatus> {
   return json<EventIndexStatus>(`/v1/events/${encodeURIComponent(eventId)}/index-status`, {
+    cache: "no-store",
     headers: { Authorization: `Bearer ${token}` }
   });
 }
